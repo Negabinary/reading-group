@@ -19,9 +19,13 @@ If an institution-managed Google project prohibits service-account keys or exter
 
 ### Cloudflare
 
-1. [Create a Cloudflare account](https://dash.cloudflare.com/sign-up) and keep **Workers Free**. No domain purchase is needed: the app gets a workers.dev address.
-2. In **Workers & Pages**, complete the initial Workers setup and choose a workers.dev subdomain if prompted.
-3. Copy the **Account ID** from the dashboard. It is a 32-character hexadecimal value. Do not create a separate Pages project or enable a paid Workers subscription.
+1. [Create a Cloudflare account](https://dash.cloudflare.com/sign-up), sign in, and verify your email if prompted. Open the account you want to use for the reading group.
+2. **Leave the Workers plan at its default.** New accounts already have access to **Workers Free**, the $0 plan; there is no separate “activate Free” step. “Keep Workers Free” just means skip any offer to upgrade to **Workers Paid**, which starts at $5/month. This refers to the Workers subscription, not a domain's Free/Pro/Business plan. See [Cloudflare's Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/).
+3. Open **Workers & Pages** in the dashboard. We use the included **workers.dev** address, so you do not need to buy a domain, add a website/domain to Cloudflare, or change DNS settings.
+4. Look for **Your subdomain**. If Cloudflare asks you to choose one, enter an available name and confirm it. If a name is already assigned, you can keep it or select **Change** beside it. This is the account's part of the website address: choosing `mplse` (if available) would give this app **https://mplse-reading-group.mplse.workers.dev**. The `mplse-reading-group` part is already set in this repository. See [Cloudflare's subdomain instructions](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/).
+5. In **Workers & Pages → Account Details**, copy **Account ID**. Alternatively, press **Cmd+K** on Mac or **Ctrl+K** on Windows/Linux, search for **Copy account ID**, and select that result. Save this 32-character hexadecimal value for section 3 below. See [Cloudflare's Account ID instructions](https://developers.cloudflare.com/fundamentals/account/find-account-and-zone-ids/).
+
+That is all “initial Workers setup” means here: an account, its workers.dev subdomain, and its Account ID. **The GitHub Actions workflow in section 3 creates the actual Worker and uploads the app.** You can leave the application list empty for now; you do not need to create a sample Worker, create a Pages project, or import the repository through Cloudflare's dashboard.
 
 ## 2. Connect and test locally
 
@@ -29,9 +33,11 @@ Requires Node.js 22.12+ and npm. From this repository:
 
 ```sh
 npm ci
-npm run setup:local -- /path/to/downloaded-service-account.json 'https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit'
+npm run setup:local -- '/path/to/downloaded-service-account.json' 'https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit'
 npm run preview
 ```
+
+Run the setup command as **one line**, with both arguments after the `--`. Replace `/path/to/downloaded-service-account.json` with the full path to the JSON key you downloaded (for example, `/Users/matt/Downloads/reading-group-key.json`). Replace the entire example sheet URL with the actual URL copied from your browser. Keep quotes around both values so spaces in filenames and special characters in URLs are handled correctly. Running just `npm run setup:local` prints usage instructions; it does not prompt for the missing values.
 
 The helper creates ignored, private-permission files:
 

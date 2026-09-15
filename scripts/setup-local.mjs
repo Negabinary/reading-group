@@ -3,10 +3,19 @@ import { createPrivateKey } from 'node:crypto';
 
 // Credentials are read from a local file, never placed in shell arguments/logs.
 const [keyPath, sheet] = process.argv.slice(2);
-if (!keyPath || !sheet)
-  throw new Error(
-    'Usage: npm run setup:local -- /path/to/service-account.json SHEET_URL_OR_ID',
+if (!keyPath || !sheet) {
+  console.error(
+    'Setup needs two arguments: the downloaded JSON key file path and your Google Sheet URL.',
   );
+  console.error(
+    '\nRun this as one command, replacing both example values:\n' +
+      'npm run setup:local -- "/Users/matt/Downloads/YOUR_KEY_FILE.json" "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"',
+  );
+  console.error(
+    '\nKeep the -- and quote both arguments, especially paths containing spaces. No files were changed.',
+  );
+  process.exit(1);
+}
 const sheetId =
   sheet.match(
     /^https:\/\/docs\.google\.com\/spreadsheets\/d\/([\w-]+)(?:\/|$)/,
