@@ -1,0 +1,44 @@
+{
+  "name": "mplse-reading-group",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "npm run build:site && npm run build:api",
+    "build:site": "tsc --noEmit && vite build",
+    "build:api": "tsc --noEmit && node scripts/build-apps-script.mjs",
+    "build:demo": "tsc --noEmit && vite build --mode demo",
+    "preview": "vite preview --host 127.0.0.1 --outDir dist/site",
+    "preview:demo": "vite preview --host 127.0.0.1 --outDir dist/demo",
+    "test": "node --import tsx --test tests/*.test.ts && vitest run",
+    "check:search": "node --import tsx scripts/check-search.mjs",
+    "check:api": "node --import tsx scripts/check-api.mjs",
+    "format": "prettier --write src apps-script scripts tests .github *.json *.ts *.html *.md",
+    "format:check": "prettier --check src apps-script scripts tests .github *.json *.ts *.html *.md"
+  },
+  "dependencies": {
+    "@fontsource/dm-sans": "^5.3.0",
+    "@fontsource/instrument-serif": "^5.3.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/google-apps-script": "^1.0.99",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "esbuild": "^0.25.0",
+    "jsdom": "^26.1.0",
+    "prettier": "^3.9.6",
+    "tsx": "^4.19.2",
+    "typescript": "~5.7.3",
+    "vite": "^6.1.0",
+    "vite-plugin-singlefile": "^2.2.0",
+    "vitest": "^4.1.11"
+  }
+}
