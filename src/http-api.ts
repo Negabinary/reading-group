@@ -1,32 +1,26 @@
-import { validateApiUrl } from './api-config';
-
 export type ApiAction =
   'getState' | 'searchPapers' | 'signIn' | 'setVote' | 'suggestPaper';
 
 export async function requestApi<T>(
-  endpoint: string,
   action: ApiAction,
   args: unknown[],
 ): Promise<T> {
-  const url = new URL(validateApiUrl(endpoint));
+  const url = new URL('/api', window.location.origin);
   const reading = action === 'getState' || action === 'searchPapers';
   const options: RequestInit = {
     method: reading ? 'GET' : 'POST',
-    mode: 'cors',
+    mode: 'same-origin',
     credentials: 'omit',
-    redirect: 'follow',
+    redirect: 'error',
+    cache: 'no-store',
     signal: AbortSignal.timeout(45000),
   };
   if (reading) {
     url.searchParams.set('action', action);
     if (action === 'searchPapers')
       url.searchParams.set('query', String(args[0]));
-    // Keep sheet reads fresh without adding a header that triggers CORS preflight.
-    url.searchParams.set('_', crypto.randomUUID());
   } else {
-    // Apps Script has no OPTIONS handler. text/plain keeps this a simple CORS
-    // request; the body is still JSON and the response must remain readable.
-    options.headers = { 'Content-Type': 'text/plain;charset=UTF-8' };
+    options.headers = { 'Content-Type': 'application/json' };
     options.body = JSON.stringify({ action, args });
   }
 
@@ -40,12 +34,12 @@ export async function requestApi<T>(
   } catch {
     throw new Error(unavailable);
   }
-  if (!response.ok) throw new Error(unavailable);
   try {
     payload = await response.json();
   } catch {
+    if (!response.ok) throw new Error(unavailable);
     throw new Error(
-      'The reading group API did not return JSON. Check its deployment URL and anonymous access settings.',
+      'The reading group API did not return JSON. Check the Cloudflare deployment.',
     );
   }
   if (
@@ -56,7 +50,7 @@ export async function requestApi<T>(
     !('ok' in payload)
   ) {
     throw new Error(
-      'The reading group API needs updating. Deploy the latest Code.gs.',
+      'The reading group API needs updating. Deploy the latest Cloudflare Worker.',
     );
   }
   if (
@@ -66,6 +60,7 @@ export async function requestApi<T>(
   ) {
     throw new Error(payload.error);
   }
+  if (!response.ok) throw new Error(unavailable);
   if (payload.ok !== true || !('data' in payload)) {
     throw new Error(
       'The reading group API returned an invalid response. Please try Refresh.',

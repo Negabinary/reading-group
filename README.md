@@ -1,6 +1,6 @@
 # MPLSE Reading Group
 
-A reading group board with a dark, moving paper collage. The next scheduled session comes first, followed by the paper pool. Built with React and TypeScript, hosted on GitHub Pages, with a Google Apps Script HTTP API backed by **one Google spreadsheet with one Papers tab**.
+A reading group board with a dark, moving paper collage. The next scheduled session comes first, followed by the paper pool. Built with React and TypeScript, hosted with its API on Cloudflare Workers and deployed from GitHub, backed by **one Google spreadsheet with one Papers tab**.
 
 People can sign in using only a name, suggest papers through DBLP (with Crossref fallback) or a manual form, vote or withdraw a vote, search the pool, sort by votes, score, or newest, and browse past readings. The New view shows suggestions added since their last visit. Paper cards link directly to the paper when a URL is available. The organizer manages members, discussion dates, and attendance in the spreadsheet. There is no separate database, paid search API, or authentication service.
 
@@ -15,15 +15,17 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite. Without `VITE_APPS_SCRIPT_URL`, local development runs in **demo mode** with sample papers and local browser storage. Set that variable in `.env.local` to use the real Apps Script API; see [deployment instructions](DEPLOYMENT.md). The demo supports sign-in, voting, custom suggestions, search, and persistence across reloads. Sample dates are relative to the first visit. Clear the `mplse.demo.v1` local-storage entry to reset it.
+Open the local URL printed by Vite. This command explicitly runs in **demo mode** with sample papers and local browser storage. Use `npm run preview` with local service-account credentials to run the production site and API against the real sheet; see [deployment instructions](DEPLOYMENT.md). The demo supports sign-in, voting, custom suggestions, search, and persistence across reloads. Sample dates are relative to the first visit. Clear the `mplse.demo.v1` local-storage entry to reset it.
 
-Paper searches are real network requests. DBLP is tried first, then Crossref if DBLP is unavailable, returns a bot-check page, or has no results. Result sources are labeled. Vite proxies both services in development, and production searches run server-side in Apps Script. Search by a title or author for best results; Crossref also covers fields outside computer science. If both services fail, the app shows an error and leaves manual entry available. No Google Scholar scraping is used.
+Paper searches are real network requests. DBLP is tried first, then Crossref if DBLP is unavailable, returns a bot-check page, or has no results. Result sources are labeled. Vite proxies both services in development, and production searches run server-side in the Cloudflare Worker. Search by a title or author for best results; Crossref also covers fields outside computer science. If both services fail, the app shows an error and leaves manual entry available. No Google Scholar scraping is used.
 
-## Deploy or migrate from Apps Script hosting
+## Deploy with Google Sheets and Cloudflare
 
-Follow [DEPLOYMENT.md](DEPLOYMENT.md) to deploy the API, configure the public endpoint, and enable the included GitHub Pages workflow. Keep the existing sheet, member columns, votes, attendance, and script property; no data migration is required. A separate API deployment can run alongside the old HTML deployment during the transition.
+Follow [DEPLOYMENT.md](DEPLOYMENT.md) to create the free accounts, share the existing sheet with a service account, test locally, and configure GitHub deployment. No spreadsheet migration or Apps Script setup run is needed.
 
-The frontend build is `dist/site/index.html`. The API package contains `dist/apps-script/Code.gs` and `appsscript.json`; it no longer includes Index.html. Frontend changes deploy through GitHub Actions, while API changes require updating the Apps Script deployment. Production builds require a valid endpoint and cannot silently become a demo.
+Cloudflare serves the frontend in dist/site and a same-origin /api endpoint. The Worker talks directly to the Google Sheets API, avoiding Apps Script's ContentService redirects and browser Google-account sessions. A free-tier Durable Object coordinates concurrent sheet operations; application data stays in the sheet. Google credentials live in encrypted Worker secrets and never enter the browser bundle.
+
+GitHub Actions deploys frontend and API changes together. Until credentials are configured, CI runs checks and skips deployment. Live builds always call /api and cannot silently become a demo. The old Apps Script source is retained for reference; see [the previous failure investigation](APPS_SCRIPT_HISTORY.md).
 
 ## The single-sheet layout
 
@@ -62,7 +64,7 @@ Each member cell accepts:
 - **Add a person:** type their name in an unused column header after Date. The app assigns an identity note on its next refresh. To copy an existing member column for a new person, clear the copied header note and all copied votes/attendance.
 - **Remove a person:** delete their entire column. Their votes no longer count. A returning visitor can rejoin under a new identity because registration is intentionally open.
 - **Remove or edit a paper:** edit or delete its row. Removing a past paper also removes its contribution to scoring history. Archive it by preserving the row and date if you want that history retained.
-- **Direct sheet edits:** the app refreshes every 30 seconds while visible, on returning to the tab, or when Refresh is pressed. Google Apps Script locks serialize app writes. Direct edits in Google Sheets do not acquire those locks; avoid rearranging rows or columns in the middle of active app writes.
+- **Direct sheet edits:** the app refreshes every 30 seconds while visible, on returning to the tab, or when Refresh is pressed. One Cloudflare Durable Object serializes app reads and writes. Direct edits in Google Sheets do not acquire that lock; avoid rearranging rows or columns in the middle of active app writes.
 
 Votes and scores are calculated from the sheet on each refresh. They are displayed on the site; there are no computed total columns to maintain in the sheet.
 
@@ -90,30 +92,30 @@ A regular attendee whose choices have not been selected gets more weight. Someon
 ## Development and verification
 
 ```sh
-npm test             # Domain, Apps Script handler, and React interaction tests
-npm run build        # Type-check + live site + API bundle (requires .env.local)
-npm run build:api    # API package only; no frontend URL required
+npm test             # Domain, Sheets/OAuth, React, legacy API, and real Workers runtime tests
+npm run build        # Type checks + production frontend + Wrangler deployment dry run
+npm run preview      # Build and serve the connected app locally on port 8787
 npm run build:demo   # Explicit standalone demo in dist/demo
 npm run format       # Format source files
 npm run format:check # Check formatting
+npm run check:api    # Check local Worker health and real sheet connection
 npm run check:search # Optional real-network search smoke check
 ```
 
-Tests cover the HTTP action allowlist, request validation, cross-origin request options, API and connection errors, the score policy, sorting modes, returning visits, direct paper links, next-session grouping, empty schedules, motion preferences, date boundaries, data validation, DBLP response shapes, idempotent votes, attendance preservation, scheduled-vote protection, renamed/moved/removed members, duplicate suggestions, name persistence, error recovery, and both suggestion flows. Apps Script service calls are tested with an in-memory sheet double, and React interactions run in jsdom. These checks do not substitute for a final browser layout review and a real Google deployment check.
+Tests cover scoring, newest/visit behavior, card links, paper forms, action validation, OAuth signing, preserved spreadsheet identities, date/timezone conversion, literal text writes, attendance preservation, scheduled voting, and uncertain-write errors. A Miniflare integration test runs the real Workers runtime with simulated Google responses and concurrent sign-ins, votes and suggestions. It verifies asset/API routing and actual Durable Object serialization. Mocked Google tests cannot verify service-account sharing, live Google latency, or the final browser layout; check the real deployment before switching the group's link.
 
 Key files:
 
-- `src/App.tsx`: pages, dialogs, and interactions.
-- `src/PaperScene.tsx`: the next session and its moving paper scene.
-- `src/styles.css`: responsive visual design, reduced-motion support, and focus styles.
-- `src/api.ts`: live API and explicit local demo adapter.
-- `src/http-api.ts`: HTTP transport with readable JSON responses and connection errors.
-- `src/domain.ts`: shared validation, votes, DBLP normalization, and scoring.
-- `src/catalogs.ts`: paper-search providers and Crossref normalization.
-- `apps-script/server.ts`: sheet-backed API; app writes use script locks and escape spreadsheet formulas.
-- `apps-script/http.ts`: JSON GET/POST entry points with an explicit action allowlist.
-- `scripts/build-apps-script.mjs`: bundles the API into Code.gs and its manifest.
-- `.github/workflows/pages.yml`: verifies, builds, and deploys the frontend to GitHub Pages.
-- `ARTWORK.md`: generated artwork provenance and full prompt.
+- src/App.tsx, src/PaperScene.tsx, src/styles.css: interface and artwork.
+- src/api.ts, src/http-api.ts: explicit demo and same-origin live transport.
+- src/domain.ts, src/catalogs.ts: validation, scores, dates, paper search.
+- worker/index.ts: HTTP routing and the sheet coordinator.
+- worker/commands.ts: action allowlist, request limits and validation.
+- worker/google.ts: service-account OAuth and authenticated Sheets requests.
+- worker/sheets.ts: sheet decoding and atomic, narrow cell updates.
+- wrangler.json: website assets, Worker entry point and free-tier coordinator.
+- .github/workflows/cloudflare.yml: checks and automatic deployment.
+- apps-script/: retained legacy server source, outside the Cloudflare runtime.
+- ARTWORK.md: artwork provenance.
 
-Architecture references: [Google Apps Script web apps](https://developers.google.com/apps-script/guides/web), [Content Service](https://developers.google.com/apps-script/guides/content), [script locks](https://developers.google.com/apps-script/reference/lock/lock-service), [DBLP search API](https://dblp.org/faq/How+to+use+the+dblp+search+API.html), and [Crossref REST API](https://www.crossref.org/documentation/retrieve-metadata/rest-api/).
+Architecture references: [Cloudflare static assets](https://developers.cloudflare.com/workers/static-assets/), [Durable Object concurrency](https://developers.cloudflare.com/durable-objects/api/state/), [Google Sheets API](https://developers.google.com/workspace/sheets/api/reference/rest), [service-account OAuth](https://developers.google.com/identity/protocols/oauth2/service-account), [DBLP](https://dblp.org/faq/How+to+use+the+dblp+search+API.html), and [Crossref](https://www.crossref.org/documentation/retrieve-metadata/rest-api/).

@@ -1,86 +1,152 @@
-# GitHub Pages + Apps Script
+# Google Sheets + Cloudflare + GitHub
 
-GitHub Pages serves the React site. The browser calls an Apps Script web app over HTTP; Apps Script reads and writes the existing Papers tab and searches DBLP/Crossref. No spreadsheet migration or new database is needed.
+Cloudflare Workers serves both the website and its same-origin /api endpoint. It calls the Google Sheets API directly using a service account. GitHub stores the source and deploys both parts together. Visitors do not authenticate with Google, and Apps Script is no longer in the request path.
 
-## 1. Deploy the API
+The existing **Papers** tab is used as-is. Keep its column order, member header notes, votes, attendance, and paper IDs. **Do not re-run setupMplse or replace the spreadsheet.**
+
+## 1. Create the two free accounts/project connections
+
+### Google
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/projectcreate) and create a project such as **MPLSE Reading Group**. This setup needs the Sheets API, not Cloud Run or a billing account.
+2. With that project selected, [enable the Google Sheets API](https://console.cloud.google.com/apis/library/sheets.googleapis.com).
+3. Open [IAM & Admin → Service Accounts](https://console.cloud.google.com/iam-admin/serviceaccounts), choose **Create service account**, and name it **reading-group**. Skip granting project roles and skip granting users access to the service account. Sheet access is granted by sharing the document in the next step.
+4. Open the service account → **Keys → Add key → Create new key → JSON**. Keep the downloaded file outside this repository. Do not paste the private key into chat, the frontend, or an Apps Script file.
+5. In the **existing Google Sheet**, click **Share** and add the service account's email as **Editor**. Keep the sheet's general access restricted. The API can read the group's data without making the document itself publicly editable.
+6. Copy the sheet's URL. Its spreadsheet ID is between /d/ and /edit; the gid is a tab ID and is not the spreadsheet ID.
+
+If an institution-managed Google project prohibits service-account keys or external sharing, that restriction needs resolving with its administrator or an appropriate independent project. Do not enable domain-wide delegation.
+
+### Cloudflare
+
+1. [Create a Cloudflare account](https://dash.cloudflare.com/sign-up) and keep **Workers Free**. No domain purchase is needed: the app gets a workers.dev address.
+2. In **Workers & Pages**, complete the initial Workers setup and choose a workers.dev subdomain if prompted.
+3. Copy the **Account ID** from the dashboard. It is a 32-character hexadecimal value. Do not create a separate Pages project or enable a paid Workers subscription.
+
+## 2. Connect and test locally
+
+Requires Node.js 22.12+ and npm. From this repository:
 
 ```sh
 npm ci
-npm run build:api
-```
-
-The output is `dist/apps-script/Code.gs` and `dist/apps-script/appsscript.json`. **Index.html is no longer part of the Apps Script package.**
-
-1. Open the existing spreadsheet → **Extensions → Apps Script**. Replace **Code.gs** with the generated file and save. Keep the current spreadsheet and the `SPREADSHEET_ID` script property. The existing manifest already has the required scopes; the generated manifest is included for new installations.
-2. For a new installation only, paste the generated manifest (enable it under **Project Settings**) and run **setupMplse** from the bound script editor. Authorize it. Existing installations do not need setup again. Setup preserves a compatible Papers tab.
-3. Use **Deploy → New deployment → Web app**, with **Execute as: Me** and **Who has access: Anyone**. A separate deployment lets the old, versioned HTML site keep working during the transition. Keep its old Index file in the editor until the old site is retired; the API deployment does not use it.
-4. Copy the new **Web app URL**. It must have the form `https://script.google.com/macros/s/DEPLOYMENT_ID/exec`, without `/u/1/`, query parameters, or a `/dev` suffix.
-5. Open that URL signed out of Google. Expect `{"apiVersion":1,"ok":true,"data":{"service":"mplse-reading-group"}}`. Then append `?action=getState` and confirm `ok: true` and your group's data. Health checks do not access the sheet; getState checks the actual connection.
-
-If you prefer to reuse the old URL, use **Deploy → Manage deployments → Edit → New version → Deploy** instead of creating a separate deployment. That URL will immediately become an API endpoint and stop displaying the old site. Saving the source alone does not update a versioned deployment.
-
-Anonymous access is required for this browser client, which sends no Google cookies. If your Workspace administrator disables **Anyone**, this direct GitHub Pages setup needs a different API access arrangement before it can go live. Name-only sign-in retains the existing trust model: visitors can choose any member's name and read the group's papers, votes, and attendance. The API URL is public configuration, not a password. Google sharing permissions still control direct spreadsheet editing.
-
-## 2. Preview the connected site
-
-Copy `.env.example` to `.env.local` and set the URL from step 1:
-
-```dotenv
-VITE_APPS_SCRIPT_URL=https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec
-```
-
-```sh
-npm run dev
-```
-
-With that variable present, local development uses the real sheet. Restart Vite after changing it. Without the variable, local development uses the sample-data demo.
-
-Run `npm run check:api` to check the published API's health and spreadsheet connection without signing in, voting, or suggesting a paper. As with a normal refresh, getState assigns missing IDs to manually added rows or member columns.
-
-For a production preview:
-
-```sh
-npm run build
+npm run setup:local -- /path/to/downloaded-service-account.json 'https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit'
 npm run preview
 ```
 
-This creates **`dist/site/index.html`** for Pages and the separate API package. Production builds fail if the endpoint is missing or malformed; they never publish demo data by accident. `npm run build:demo` creates an explicitly isolated demo in `dist/demo`, and `npm run preview:demo` previews it.
+The helper creates ignored, private-permission files:
 
-## 3. Enable GitHub Pages
+- **.dev.vars**: credentials used by local Wrangler.
+- **secrets.local.json**: the same values in Wrangler's secret-upload format.
 
-1. Push this source project, including `.github/workflows/pages.yml` and `package-lock.json`, to the intended GitHub repository. The workflow deploys from `main`; change its branch filter if your publishing branch has another name. Build output, node_modules, and `.env.local` are ignored by Git.
-2. Under **Settings → Secrets and variables → Actions → Variables**, add the repository variable **APPS_SCRIPT_URL**, with the public `/exec` URL from step 1. Use a variable rather than a secret: the address is included in the browser bundle.
-3. Under **Settings → Pages → Build and deployment**, select **Source: GitHub Actions**.
-4. Under **Actions**, run **Deploy reading group**, or push a change to `main`. It installs dependencies, runs tests and formatting checks, checks the deployed API, builds the live frontend, and uploads only `dist/site`. An inaccessible API or an old HTML deployment blocks publication. The deploy job reports the final Pages URL.
+Open **http://127.0.0.1:8787**. This is the real Cloudflare runtime serving the production frontend locally, connected to the real sheet. Changes made here affect that sheet. Until credentials are configured, it shows a connection/setup error rather than demo data.
 
-Relative asset URLs support both `https://OWNER.github.io/REPOSITORY/` and a custom domain. The Apps Script code and manifest are outside the Pages artifact.
+In another terminal:
 
-## 4. Check the real connection before sharing
+```sh
+npm run check:api
+```
 
-Open the Pages URL in a normal browser and a fresh private window:
+This checks health and the actual sheet connection, reports timings and counts, and makes no votes or suggestions. Like a normal refresh, it assigns stable IDs to manually added rows or member headers that lack them.
 
-- Your actual papers appear, with no demo banner. Refresh loads changes made directly in the sheet.
-- Sign in using your existing name. Confirm it reuses your column; votes and attendance stay intact.
-- Add and withdraw a vote on an unscheduled paper and check the sheet cell. Check that scheduled papers still cannot be voted on.
-- Search for a paper, suggest it, and check the new row and initial vote. Open its direct card link.
-- Check Newest sorting and, on a later visit after another suggestion, New since last visit.
+For frontend work with automatic reload, run **npm run dev:api** and **npm run dev:live** in separate terminals. Plain **npm run dev** explicitly starts the isolated sample-data demo.
 
-Browser identity and visit history belong to the site origin. Moving to GitHub Pages means entering your name once again and establishing a fresh visit baseline. Your existing sheet data is preserved.
+Old VITE_APPS_SCRIPT_URL settings and .env.local do not affect the new live frontend.
 
-Local tests cover both HTTP handlers and the browser transport, but mocked tests cannot verify Google's live CORS responses or your deployment permissions. Complete this browser check before retiring the old HTML deployment.
+## 3. Connect GitHub deployment
 
-## Future updates
+The workflow is **.github/workflows/cloudflare.yml**. Push it with the source and lockfile. Every pull request and push to main runs tests, type checks, formatting, and a deployment dry run. Production deployment remains skipped until CLOUDFLARE_ACCOUNT_ID is set.
 
-- **Frontend changes:** push to `main`; GitHub Actions updates Pages automatically. No HTML paste in Apps Script is needed.
-- **API changes:** run `npm run build:api`, replace Code.gs in the editor, then update the **API** deployment with **New version → Deploy**. Its URL stays the same.
-- **API URL changes:** update `APPS_SCRIPT_URL` in GitHub and run the workflow again. Update `.env.local` for local development.
+1. In Cloudflare, open [My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens) and create a token using **Edit Cloudflare Workers**. Limit its account resources to this reading group's Cloudflare account. For this workers.dev deployment, no custom domain or DNS-edit setup is needed.
+2. In [GitHub repository Actions secrets](https://github.com/Negabinary/reading-group/settings/secrets/actions), add **CLOUDFLARE_API_TOKEN**. Alternatively run **gh secret set CLOUDFLARE_API_TOKEN** and enter the token at its prompt.
+3. After running setup:local, upload the two Google settings and enable the deployment:
 
-## Troubleshooting
+```sh
+npm run setup:github -- YOUR_CLOUDFLARE_ACCOUNT_ID
+gh workflow run cloudflare.yml --ref main
+```
 
-- **The API returns HTML or a Google sign-in page:** check the clean `/macros/s/.../exec` URL, anonymous access, and that the API version has actually been deployed. The frontend reports this as a connection error and never switches to the demo.
-- **Health works but getState fails:** the JSON `error` describes the sheet or setup problem. Check that this is the same bound project and its `SPREADSHEET_ID` property is present. Inspect **Executions** in Apps Script for service failures.
-- **The site loads but requests fail:** check the browser Network panel and the Apps Script deployment's access setting. Requests follow Google's redirect to `script.googleusercontent.com`. POST bodies use JSON with a `text/plain` content type to avoid an OPTIONS preflight. Do not change this to `application/json`, add an Authorization header, or use `no-cors`; opaque responses cannot confirm saved votes.
-- **A write times out:** refresh and inspect its result before retrying. The server may have saved it even when the browser did not receive the response. The client does not automatically retry writes.
-- **GitHub authentication fails locally:** run `gh auth login --hostname github.com`, or push using your usual Git client. Pages also needs to be enabled with GitHub Actions as its source.
+The helper uses your existing gh login, sends secrets through standard input, and does not print credential values. It configures:
 
-References: [Apps Script Content Service and redirects](https://developers.google.com/apps-script/guides/content), [web app deployment settings](https://developers.google.com/apps-script/guides/web), [simple CORS requests](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS#simple_requests), and [GitHub Pages custom workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+| GitHub setting              | Kind                | Value                              |
+| --------------------------- | ------------------- | ---------------------------------- |
+| CLOUDFLARE_ACCOUNT_ID       | Repository variable | Cloudflare account ID              |
+| CLOUDFLARE_API_TOKEN        | Repository secret   | Scoped Cloudflare deployment token |
+| GOOGLE_SHEET_ID             | Repository secret   | Spreadsheet ID                     |
+| GOOGLE_SERVICE_ACCOUNT_JSON | Repository secret   | Service account JSON key           |
+
+You can also enter these settings through GitHub's UI. GOOGLE_SERVICE_ACCOUNT_JSON must be the JSON object from the downloaded file, not its filename or just its private_key field.
+
+4. Watch **Actions → Test and deploy reading group**. After checks pass, it uploads the website and Worker, configures encrypted Worker secrets, and checks the deployed API against the real sheet. The **cloudflare** environment links to the new site.
+5. Subsequent pushes to main update the website and API together. No Apps Script copy/paste is needed.
+
+Do not upload secrets.local.json, .dev.vars, or the downloaded key as GitHub source files or build artifacts. Credentials are used only by the Worker; the browser bundle contains no Google credentials.
+
+### Optional first deployment from your terminal
+
+GitHub Actions is the normal deployment path. To deploy locally instead:
+
+```sh
+npx wrangler login
+npm run deploy
+npx wrangler secret bulk secrets.local.json
+npm run check:api -- https://mplse-reading-group.YOUR_SUBDOMAIN.workers.dev
+```
+
+The first deploy creates the Worker; it reports that the sheet connection is awaiting setup until secret upload finishes. Configure the GitHub settings above for later automatic updates.
+
+## 4. Verify and switch the group's link
+
+Before retiring the old deployment, check the new Cloudflare URL in a normal browser with multiple Google accounts and in a private window:
+
+- Actual papers appear, with no demo banner. Direct sheet edits appear after Refresh.
+- Signing in with your existing name reuses your member column.
+- Adding/withdrawing a vote preserves attendance; dated papers cannot be voted on.
+- Search, suggestions, the initial suggestion vote, and direct paper links work.
+- Newest and New since last visit behave as expected.
+
+Browser sign-in and visit history are tied to the website origin. People enter their existing name once on the new site, and their first visit establishes a new visit baseline. Their sheet data and identity remain intact.
+
+The old GitHub Pages workflow has been removed so a Cloudflare /api build cannot accidentally be published there. The already-published Pages site remains available until you replace it or disable Pages. Share the new workers.dev URL after verification. Then archive the old Apps Script web-app deployments under **Deploy → Manage deployments** and retire or redirect the old Pages site.
+
+Avoid running both backends for ongoing writes: Apps Script's lock and Cloudflare's coordinator cannot lock each other. Direct structural edits in Sheets also bypass the coordinator; avoid rearranging rows/columns during active app writes.
+
+## What can the API do?
+
+Public actions remain deliberately limited:
+
+| Action       | Access                                                                  |
+| ------------ | ----------------------------------------------------------------------- |
+| health       | Service check; no sheet access                                          |
+| getState     | Read Papers; assign missing paper IDs/member identity notes             |
+| searchPapers | Search DBLP, then Crossref                                              |
+| signIn       | Reuse or create a member column                                         |
+| setVote      | Change one member's vote on an unscheduled paper, preserving attendance |
+| suggestPaper | Append a validated, nonduplicate paper and its initial vote             |
+
+There is no public action to delete rows, change discussion dates, change attendance, execute arbitrary Sheets requests, or run setup. Text writes use explicit string values, so a submitted title beginning with = is not a formula.
+
+Name-only identity is still a trust-based system: a visitor can choose somebody else's name. Public API responses include member names, papers, votes and attendance. Registration and suggestions remain open; same-origin JSON checks stop unrelated browser forms but do not authenticate users or stop a custom bot. Input size limits, duplicate validation, and platform quotas remain in place.
+
+The service-account credential itself is more powerful than the API: Editor sharing grants it editing access to the shared spreadsheet. Share only the intended sheet with that account. Organizers can revoke access by removing that sharing entry or disabling its key.
+
+## Cost and reliability
+
+Use **Workers Free**. Static assets are free; Worker and Durable Object requests have free daily allowances. The included SQLite-backed Durable Object is only a coordinator for concurrent Sheets operations: it stores no papers, votes, members, or SQL rows. There is no database to administer. Free-plan limits reject excess requests rather than automatically upgrading the account. See [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/) and [Durable Objects pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/).
+
+The [Sheets API's standard quota](https://developers.google.com/workspace/sheets/api/limits) is free: normally 60 reads and 60 writes per minute for this one service account. Each refresh uses one read; each mutation uses one read and one atomic batch write. A refresh that repairs missing IDs also uses one write. With 30-second polling, roughly 30 continuously visible tabs would use the read allowance before manual actions, so leave headroom. Google currently notes plans for paid above-quota usage later in 2026; this setup does not request higher quotas or attach billing.
+
+All app reads and writes pass through one named coordinator per spreadsheet. This prevents concurrent member-column allocation and duplicate suggestions. Sheet responses are not cached. Only the short-lived Google OAuth token is cached to avoid signing in to Google for every refresh. Writes are never automatically retried after an uncertain response.
+
+Direct Sheets access removes the observed Apps Script ContentService redirect failure. It still depends on Google Sheets availability and quotas; production latency and account permissions must be checked with the real deployment. [The previous investigation](APPS_SCRIPT_HISTORY.md) records why we moved.
+
+## Troubleshooting and rollback
+
+- **Awaiting its Google Sheets connection:** set both Worker secrets and redeploy/re-run the GitHub workflow.
+- **Service account cannot access the sheet:** check the spreadsheet ID, Editor sharing to the exact service-account email, and Sheets API enablement.
+- **Authentication error:** check that the key belongs to that account and has not been deleted. Rotate it by generating a new key, rerunning setup:local/setup:github, and redeploying before deleting the old key.
+- **HTTP 429:** wait a minute; close unused tabs. Avoid immediate repeated refreshes.
+- **Uncertain write:** Refresh and inspect the sheet before repeating the action. A lost response can happen after a committed write.
+- **Health succeeds but state fails:** health checks only the Worker. The getState error identifies connection or sheet-layout issues.
+- **GitHub checks pass but deploy is skipped:** set repository variable CLOUDFLARE_ACCOUNT_ID after the secrets are ready.
+- **GitHub deploy succeeds but its connection check fails:** the site is deployed, but the sheet setup still needs correcting; check the error before sharing the URL.
+- **Rollback:** Cloudflare's deployment history can restore a previous compatible Worker version. Sheets version history handles data restoration separately. Restoring a Worker does not roll back sheet changes. The legacy Apps Script source remains under apps-script/ for reference and can be rebuilt with npm run build:legacy.

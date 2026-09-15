@@ -1,23 +1,20 @@
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { viteSingleFile } from 'vite-plugin-singlefile';
-import { validateApiUrl } from './src/api-config';
 
-export default defineConfig(({ command, mode }) => {
-  const env = loadEnv(mode, process.cwd(), 'VITE_');
-  if (command === 'build' && mode !== 'demo') {
-    validateApiUrl(env.VITE_APPS_SCRIPT_URL || '');
-  }
+export default defineConfig(({ mode }) => {
   return {
     base: './',
     build: { outDir: mode === 'demo' ? 'dist/demo' : 'dist/site' },
-    define:
-      mode === 'demo'
-        ? { 'import.meta.env.VITE_APPS_SCRIPT_URL': JSON.stringify('') }
-        : {},
+    define: {
+      'import.meta.env.VITE_DEMO': JSON.stringify(
+        mode === 'demo' ? 'true' : 'false',
+      ),
+    },
     plugins: [react(), viteSingleFile()],
     server: {
       proxy: {
+        '/api': { target: 'http://127.0.0.1:8787', changeOrigin: false },
         '/dblp-api': {
           target: 'https://dblp.org',
           changeOrigin: true,

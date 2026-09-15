@@ -2,7 +2,7 @@ import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
 // UI fixtures stay local even when a developer has configured the live API.
-vi.stubEnv('VITE_APPS_SCRIPT_URL', '');
+vi.stubEnv('VITE_DEMO', 'true');
 
 HTMLDialogElement.prototype.showModal = function () {
   this.setAttribute('open', '');

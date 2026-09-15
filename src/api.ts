@@ -9,17 +9,16 @@ import { catalogs, SEARCH_ERROR } from './catalogs';
 import { requestApi, type ApiAction } from './http-api';
 import type { GroupState, Member, PaperInput, SearchPaper } from './types';
 
-const endpoint = import.meta.env.VITE_APPS_SCRIPT_URL?.trim() || '';
-// A configured API failure must never silently seed demo data. Production
-// builds require this URL; the demo build is a separate, explicit command.
-export const isDemo = !endpoint;
+// Live builds always use the Worker on this website's origin. Old .env.local
+// Apps Script URLs cannot accidentally redirect a production build to Google.
+export const isDemo = import.meta.env.VITE_DEMO === 'true';
 const DEMO_KEY = 'mplse.demo.v1';
 export const IDENTITY_KEY = isDemo
   ? 'mplse.identity.demo.v1'
   : 'mplse.identity.live.v1';
 
 function rpc<T>(method: ApiAction, ...args: unknown[]): Promise<T> {
-  return requestApi<T>(endpoint, method, args);
+  return requestApi<T>(method, args);
 }
 
 function readDemo(): GroupState {

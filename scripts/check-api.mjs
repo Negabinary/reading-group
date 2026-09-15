@@ -1,50 +1,62 @@
-import { loadEnv } from 'vite';
-import { validateApiUrl } from '../src/api-config.ts';
-
-// No sign-ins, votes, or suggestions. This checks the deployed API before Pages
-// publishes a frontend configured to use it; browser CORS still needs a real check.
-const env = loadEnv('production', process.cwd(), 'VITE_');
-const endpoint = validateApiUrl(env.VITE_APPS_SCRIPT_URL || '');
+// No sign-in, vote, or suggestion. getState can assign missing stable IDs.
+const base =
+  process.argv[2] || process.env.DEPLOYMENT_URL || 'http://127.0.0.1:8787';
+const url = new URL('/api', base);
+if (
+  url.protocol !== 'https:' &&
+  !(
+    url.protocol === 'http:' &&
+    ['localhost', '127.0.0.1'].includes(url.hostname)
+  )
+)
+  throw new Error('Provide an HTTPS site URL, or a local preview URL.');
 async function read(action) {
-  const url = new URL(endpoint);
   url.searchParams.set('action', action);
-  url.searchParams.set('_', crypto.randomUUID());
+  const start = performance.now();
   const response = await fetch(url, {
-    redirect: 'follow',
-    credentials: 'omit',
-    signal: AbortSignal.timeout(45000),
+    redirect: 'error',
+    signal: AbortSignal.timeout(30000),
+    cache: 'no-store',
   });
-  if (!response.ok)
-    throw new Error(
-      `API ${action} returned HTTP ${response.status}. Check anonymous access.`,
-    );
   let body;
   try {
     body = await response.json();
   } catch {
     throw new Error(
-      'API returned HTML or invalid JSON. Deploy the API Code.gs with access set to Anyone.',
+      'API ' + action + ' returned HTTP ' + response.status + ' without JSON.',
     );
   }
-  if (body?.apiVersion !== 1 || body.ok !== true) {
+  if (!response.ok || body?.apiVersion !== 1 || body.ok !== true)
     throw new Error(
-      body?.error || 'Expected version 1 of the reading group API.',
+      body?.error || 'API ' + action + ' failed: HTTP ' + response.status,
     );
-  }
+  console.log(
+    action +
+      ': HTTP ' +
+      response.status +
+      ', ' +
+      Math.round(performance.now() - start) +
+      ' ms',
+  );
   return body.data;
 }
-
 const health = await read('health');
-if (health?.service !== 'mplse-reading-group')
-  throw new Error('This is not the reading group API.');
+if (
+  health?.service !== 'mplse-reading-group' ||
+  health.backend !== 'google-sheets'
+)
+  throw new Error('This is not the Cloudflare + Sheets API.');
 const state = await read('getState');
 if (
   !Array.isArray(state?.members) ||
   !Array.isArray(state?.papers) ||
   typeof state?.today !== 'string'
-) {
+)
   throw new Error('API returned an invalid group state.');
-}
 console.log(
-  `API connected: ${state.papers.length} papers, ${state.members.length} members.`,
+  'Connected: ' +
+    state.papers.length +
+    ' papers, ' +
+    state.members.length +
+    ' members. No votes or suggestions changed.',
 );

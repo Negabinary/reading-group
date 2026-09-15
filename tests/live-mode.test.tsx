@@ -1,11 +1,10 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { validateApiUrl } from '../src/api-config';
 
-const endpoint = 'https://script.google.com/macros/s/test-deployment/exec';
+const endpoint = new URL('/api', window.location.origin).toString();
 const state = { members: [], papers: [], today: '2026-09-14', sheetUrl: '' };
 
-async function liveApi(url = endpoint) {
-  vi.stubEnv('VITE_APPS_SCRIPT_URL', url);
+async function liveApi() {
+  vi.stubEnv('VITE_DEMO', 'false');
   vi.resetModules();
   return import('../src/api');
 }
@@ -33,7 +32,7 @@ test('a failed API shows an error instead of switching a live site to demo data'
   expect(localStorage.getItem('mplse.demo.v1')).toBeNull();
 });
 
-test('reads follow redirects without cookies or preflight headers and encode search queries', async () => {
+test('reads use the same origin without caching and encode search queries', async () => {
   const fetcher = vi
     .fn()
     .mockResolvedValue(json({ apiVersion: 1, ok: true, data: state }));
@@ -45,12 +44,13 @@ test('reads follow redirects without cookies or preflight headers and encode sea
   const [second] = fetcher.mock.calls[1];
   expect(new URL(first).origin + new URL(first).pathname).toBe(endpoint);
   expect(new URL(first).searchParams.get('action')).toBe('getState');
-  expect(first).not.toBe(second);
+  expect(first).toBe(second);
   expect(options).toMatchObject({
     method: 'GET',
-    mode: 'cors',
+    mode: 'same-origin',
     credentials: 'omit',
-    redirect: 'follow',
+    redirect: 'error',
+    cache: 'no-store',
   });
   expect(options.headers).toBeUndefined();
   expect(options.body).toBeUndefined();
@@ -61,7 +61,7 @@ test('reads follow redirects without cookies or preflight headers and encode sea
   );
 });
 
-test('writes use POST with JSON in a simple text/plain request and surface API errors', async () => {
+test('writes use same-origin JSON POST and surface API errors', async () => {
   const fetcher = vi
     .fn()
     .mockResolvedValue(json({ apiVersion: 1, ok: true, data: state }));
@@ -72,10 +72,11 @@ test('writes use POST with JSON in a simple text/plain request and surface API e
   expect(url).toBe(endpoint);
   expect(options).toMatchObject({
     method: 'POST',
-    mode: 'cors',
+    mode: 'same-origin',
     credentials: 'omit',
-    redirect: 'follow',
-    headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+    redirect: 'error',
+    cache: 'no-store',
+    headers: { 'Content-Type': 'application/json' },
   });
   expect(JSON.parse(options.body)).toEqual({
     action: 'setVote',
@@ -128,7 +129,7 @@ test('name and suggestion requests use the same API and never retry uncertain wr
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
 
-test('Google login HTML, HTTP failures, and incompatible API responses are reported clearly', async () => {
+test('HTML, HTTP failures, and incompatible API responses are reported clearly', async () => {
   const fetcher = vi.fn();
   vi.stubGlobal('fetch', fetcher);
   const { api } = await liveApi();
@@ -138,7 +139,7 @@ test('Google login HTML, HTTP failures, and incompatible API responses are repor
       throw new SyntaxError('Unexpected <');
     },
   });
-  await expect(api.getState()).rejects.toThrow('anonymous access settings');
+  await expect(api.getState()).rejects.toThrow('Cloudflare deployment');
   fetcher.mockResolvedValue({ ok: false, status: 503 });
   await expect(api.getState()).rejects.toThrow('Could not reach');
   for (const payload of [
@@ -147,29 +148,44 @@ test('Google login HTML, HTTP failures, and incompatible API responses are repor
     { apiVersion: 2, ok: true, data: state },
   ]) {
     fetcher.mockResolvedValue(json(payload));
-    await expect(api.getState()).rejects.toThrow('Deploy the latest Code.gs');
+    await expect(api.getState()).rejects.toThrow(
+      'Deploy the latest Cloudflare Worker',
+    );
   }
   fetcher.mockResolvedValue(json({ apiVersion: 1, ok: true }));
   await expect(api.getState()).rejects.toThrow('invalid response');
   expect(localStorage.getItem('mplse.demo.v1')).toBeNull();
 });
 
-test('invalid live configuration remains live and is rejected before sending data', async () => {
-  const fetcher = vi.fn();
+test('old Apps Script environment variables cannot redirect the live client', async () => {
+  vi.stubEnv(
+    'VITE_APPS_SCRIPT_URL',
+    'https://script.google.com/macros/s/old/exec',
+  );
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue(json({ apiVersion: 1, ok: true, data: state }));
   vi.stubGlobal('fetch', fetcher);
-  for (const url of [
-    'https://example.com/exec',
-    endpoint.replace('/macros/s/', '/macros/u/1/s/'),
-    endpoint.replace('/exec', '/dev'),
-    `${endpoint}?x=1`,
-    `${endpoint}#fragment`,
-  ]) {
-    expect(() => validateApiUrl(url)).toThrow('Set VITE_APPS_SCRIPT_URL');
-  }
-  expect(validateApiUrl(` ${endpoint} `)).toBe(endpoint);
-  const { api, isDemo } = await liveApi('https://example.com/exec');
+  const { api, isDemo } = await liveApi();
   expect(isDemo).toBe(false);
-  await expect(api.signIn('Alex')).rejects.toThrow('Set VITE_APPS_SCRIPT_URL');
-  expect(fetcher).not.toHaveBeenCalled();
+  await api.getState();
+  expect(new URL(fetcher.mock.calls[0][0]).origin).toBe(window.location.origin);
   expect(localStorage.getItem('mplse.demo.v1')).toBeNull();
+});
+
+test('HTTP error envelopes retain actionable sheet/quota messages', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: async () => ({
+        apiVersion: 1,
+        ok: false,
+        error: 'Please wait a minute before refreshing.',
+      }),
+    }),
+  );
+  const { api } = await liveApi();
+  await expect(api.getState()).rejects.toThrow('Please wait a minute');
 });
