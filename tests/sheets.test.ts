@@ -258,6 +258,26 @@ test('scheduling columns are added once without moving or changing any existing 
   );
 });
 
+test('scheduling header casing cannot turn fields into sign-in choices', async () => {
+  const google = new SheetFixture();
+  const rows = google.document.sheets[0].data![0].rowData!;
+  rows[0].values!.push(cell(' time '), cell('LOCATION'));
+  rows[1].values!.push(cell('2:30 PM'), cell('Room 101'));
+  google.document.sheets[0].properties.gridProperties.columnCount = 15;
+  const state = (await new ReadingSheet(google, 'sheet').execute(
+    { action: 'getState' },
+    signal(),
+  )) as GroupState;
+  assert.deepEqual(
+    state.members.map((m) => m.name),
+    ['Alex', 'Sam'],
+  );
+  assert.equal(state.papers[0].time, '14:30');
+  assert.equal(state.papers[0].location, 'Room 101');
+  assert.deepEqual(state.papers[0].votes, ['alex-id', 'sam-id']);
+  assert.equal(google.writes.length, 0);
+});
+
 test('time and location follow their headers, including beside Date; votes and new suggestions still work', async () => {
   const google = new SheetFixture();
   const rows = google.document.sheets[0].data![0].rowData!;

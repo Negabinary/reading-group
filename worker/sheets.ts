@@ -210,16 +210,16 @@ export function decodeSheet(
     if (!name) continue;
     const note = headers[column]?.note || '';
     // Existing members called Time/Location retain their identities and votes.
-    if (
-      SCHEDULE_FIELDS.some((field) => field === name) &&
-      !note.startsWith(USER_PREFIX)
-    ) {
-      if (scheduleColumns.has(name))
+    const scheduleField = SCHEDULE_FIELDS.find(
+      (field) => field.toLocaleLowerCase() === name.toLocaleLowerCase(),
+    );
+    if (scheduleField && !note.startsWith(USER_PREFIX)) {
+      if (scheduleColumns.has(scheduleField))
         throw new ApiError(
           `Keep only one ${name} column in the Papers tab.`,
           409,
         );
-      scheduleColumns.set(name, column);
+      scheduleColumns.set(scheduleField, column);
       continue;
     }
     if (note.startsWith('mplse-field:'))

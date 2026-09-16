@@ -80,6 +80,10 @@ export async function parseCommand(request: Request): Promise<Command> {
       const name = normalizeName(args[0]);
       if (!name || name.length > 60)
         throw new ApiError('Enter a name between 1 and 60 characters.');
+      if (['time', 'location'].includes(name.toLocaleLowerCase()))
+        throw new ApiError(
+          'Time and Location are scheduling fields. Enter your name to sign in.',
+        );
       return { action: 'signIn', name };
     }
     case 'setVote':

@@ -1,3 +1,4 @@
+import { AltPaper, AltSchedule } from './Alt';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import {
@@ -619,7 +620,11 @@ function PaperCard({
   );
 }
 
-export default function App() {
+export default function App({
+  alternative = false,
+}: {
+  alternative?: boolean;
+}) {
   const [state, setState] = useState<GroupState | null>(null);
   const [memberId, setMemberId] = useState(() => {
     try {
@@ -805,7 +810,7 @@ export default function App() {
   }
 
   return (
-    <>
+    <div className={alternative ? 'alt-app' : undefined}>
       <a className="skip-link" href="#paper-pool">
         Skip to papers
       </a>
@@ -851,14 +856,23 @@ export default function App() {
             </button>
           </div>
         )}
-        <PaperScene
-          upcoming={upcoming}
-          papers={pool}
-          loading={!state}
-          onDetails={setDetailId}
-          timeZone={state?.timeZone}
-          onCalendar={isDemo ? undefined : () => setModal('calendar')}
-        />
+        {alternative ? (
+          <AltSchedule
+            upcoming={upcoming}
+            state={state}
+            onDetails={setDetailId}
+            onCalendar={isDemo ? undefined : () => setModal('calendar')}
+          />
+        ) : (
+          <PaperScene
+            upcoming={upcoming}
+            papers={pool}
+            loading={!state}
+            onDetails={setDetailId}
+            timeZone={state?.timeZone}
+            onCalendar={isDemo ? undefined : () => setModal('calendar')}
+          />
+        )}
         <section
           className="reading-section"
           id="paper-pool"
@@ -940,20 +954,33 @@ export default function App() {
           )}
           <div className="paper-grid">
             {state &&
-              shown.map((paper, index) => (
-                <PaperCard
-                  key={paper.id}
-                  paper={paper}
-                  index={index}
-                  state={state}
-                  memberId={memberId}
-                  voting={busy}
-                  onVote={() => requireMember({ kind: 'vote', id: paper.id })}
-                  onDetails={() => setDetailId(paper.id)}
-                  archived={view === 'archive'}
-                  isNew={!paper.date && Date.parse(paper.addedAt) > since}
-                />
-              ))}
+              shown.map((paper, index) =>
+                alternative ? (
+                  <AltPaper
+                    key={paper.id}
+                    paper={paper}
+                    index={index}
+                    state={state}
+                    memberId={memberId}
+                    voting={busy}
+                    onVote={() => requireMember({ kind: 'vote', id: paper.id })}
+                    onDetails={() => setDetailId(paper.id)}
+                  />
+                ) : (
+                  <PaperCard
+                    key={paper.id}
+                    paper={paper}
+                    index={index}
+                    state={state}
+                    memberId={memberId}
+                    voting={busy}
+                    onVote={() => requireMember({ kind: 'vote', id: paper.id })}
+                    onDetails={() => setDetailId(paper.id)}
+                    archived={view === 'archive'}
+                    isNew={!paper.date && Date.parse(paper.addedAt) > since}
+                  />
+                ),
+              )}
           </div>
           {state && shown.length === 0 && (
             <div className="empty-state">
@@ -1172,6 +1199,6 @@ export default function App() {
           </div>
         </Modal>
       )}
-    </>
+    </div>
   );
 }

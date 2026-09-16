@@ -238,3 +238,12 @@ Direct Sheets access removes the observed Apps Script ContentService redirect fa
 - **GitHub checks pass but deploy is skipped:** set repository variable CLOUDFLARE_ACCOUNT_ID after the secrets are ready.
 - **GitHub deploy succeeds but its connection check fails:** the site is deployed, but the sheet setup still needs correcting; check the error before sharing the URL.
 - **Rollback:** Cloudflare's deployment history can restore a previous compatible Worker version. Sheets version history handles data restoration separately. Restoring a Worker does not roll back sheet changes. The legacy Apps Script source remains under apps-script/ for reference and can be rebuilt with npm run build:legacy.
+
+### Text-only alternative
+
+The same site is available at `/alt/` (for example,
+`https://mplse-reading-group.negabinary.workers.dev/alt/`). Open that URL directly
+for the compact reading list; there are no view-switch links on either frontend.
+Both views share sign-in, votes, suggestions, search, and calendar subscriptions.
+No additional Worker, secrets, or deployment settings are needed: the site build
+includes an `alt/index.html` entry point. Locally, use `/alt/` on the Vite server.

@@ -1,0 +1,276 @@
+html.text-view {
+  background: #fff;
+  color: #222;
+  scroll-behavior: auto;
+}
+.text-view body::after {
+  display: none;
+}
+.alt-app {
+  --ink: #222;
+  --paper: #f6f6ef;
+  --muted: #666;
+  --line: #d9d9d0;
+  --accent: #aa3b16;
+  --mono: Verdana, Arial, sans-serif;
+  --serif: Verdana, Arial, sans-serif;
+  font:
+    13px/1.5 Verdana,
+    Arial,
+    sans-serif;
+  color: #222;
+  background: #f6f6ef;
+  max-width: 1080px;
+  min-height: calc(100vh - 20px);
+  margin: 10px auto;
+}
+.alt-app a:hover,
+.alt-app button:hover {
+  text-decoration: underline;
+}
+.alt-app .site-header {
+  background: #e66b32;
+  color: #171717;
+  padding: 6px 12px;
+  gap: 16px;
+  min-height: 0;
+  height: auto;
+  max-width: none;
+  margin: 0;
+  border: 0;
+  flex-wrap: wrap;
+}
+.alt-app .wordmark {
+  gap: 8px;
+  align-items: baseline;
+  flex-direction: row;
+}
+.alt-app .wordmark strong,
+.alt-app .wordmark span {
+  font:
+    bold 13px Verdana,
+    sans-serif;
+  letter-spacing: 0;
+}
+.alt-app .site-header nav {
+  display: flex;
+  margin: 0;
+}
+.alt-app .sign-in-button {
+  padding: 0;
+  border: 0;
+  font: inherit;
+  min-height: 24px;
+}
+.alt-app .alt-schedule {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.alt-schedule p {
+  margin: 4px 0;
+}
+.alt-schedule button {
+  padding: 0;
+  text-align: left;
+  text-decoration: underline;
+}
+.alt-session-links {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  color: #7c351a;
+}
+.alt-schedule details {
+  margin-top: 8px;
+}
+.alt-schedule summary {
+  cursor: pointer;
+}
+.alt-app .reading-section {
+  max-width: none;
+  margin: 0;
+  padding: 12px 16px;
+}
+.alt-app .section-top {
+  margin: 0;
+  padding: 0 0 8px;
+  gap: 10px;
+}
+.alt-app .section-top h2 {
+  font:
+    bold 15px Verdana,
+    sans-serif;
+  letter-spacing: 0;
+}
+.alt-app .heading-count {
+  font:
+    12px Verdana,
+    sans-serif;
+  margin-left: 8px;
+}
+.alt-app .button {
+  font: inherit;
+  min-height: 0;
+  padding: 5px 10px;
+  background: #eee;
+  color: #222;
+  border: 1px solid #aaa;
+  border-radius: 2px;
+  box-shadow: none;
+}
+.alt-app .pool-toolbar {
+  gap: 12px;
+  padding: 4px 0;
+  flex-wrap: wrap;
+}
+.alt-app .pool-tabs {
+  gap: 18px;
+}
+.alt-app .pool-tabs button {
+  font: inherit;
+  padding: 6px 0;
+  border-bottom-width: 2px;
+}
+.alt-app .pool-filters {
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.alt-app .pool-search input {
+  border: 1px solid #bbb;
+  background: #fff;
+  color: #222;
+  padding: 4px 6px;
+  width: 155px;
+  font: inherit;
+}
+.alt-app .sort-select select {
+  color-scheme: light;
+  background: #fff;
+  color: #222;
+  padding: 4px;
+  border: 1px solid #bbb;
+}
+.alt-app .paper-grid {
+  display: block;
+  padding: 14px 0 0;
+  perspective: none;
+}
+.alt-row {
+  display: grid;
+  grid-template-columns: 24px 22px minmax(0, 1fr);
+  margin-bottom: 18px;
+}
+.alt-rank {
+  text-align: right;
+  color: #777;
+  padding-right: 4px;
+}
+.alt-vote {
+  font-size: 13px;
+  padding: 0 3px;
+  color: #777;
+}
+.alt-vote[aria-pressed='true'] {
+  color: #a43913;
+}
+.alt-story h3 {
+  font:
+    14px/1.45 Verdana,
+    sans-serif;
+  overflow-wrap: anywhere;
+}
+.alt-story h3 button {
+  text-align: left;
+  padding: 0;
+}
+.alt-story h3 a:visited {
+  color: #725344;
+}
+.alt-meta {
+  font-size: 11px;
+  color: #666;
+  overflow-wrap: anywhere;
+  margin-top: 2px;
+}
+.alt-meta button {
+  padding: 0;
+  text-decoration: underline;
+}
+.alt-description {
+  margin: 4px 0;
+  color: #444;
+  font-size: 12px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+.alt-app .pool-footnote {
+  font:
+    11px Verdana,
+    sans-serif;
+  border-top: 1px solid var(--line);
+  padding: 10px 0;
+}
+.alt-app .empty-state {
+  padding: 25px 0;
+  font: inherit;
+}
+.alt-app .demo-notice {
+  padding: 4px 16px;
+  margin: 0;
+}
+.alt-app .modal {
+  font:
+    13px/1.5 Verdana,
+    sans-serif;
+  background: #f6f6ef;
+  color: #222;
+  box-shadow: none;
+  padding: 20px;
+}
+.alt-app .modal::backdrop {
+  background: #0006;
+  backdrop-filter: none;
+}
+.alt-app .modal-heading h2 {
+  font:
+    bold 21px/1.3 Verdana,
+    sans-serif;
+  letter-spacing: 0;
+}
+.alt-app .toast {
+  background: #fff;
+  color: #222;
+  border: 1px solid #aaa;
+  font: inherit;
+  box-shadow: none;
+}
+@media (max-width: 600px) {
+  .alt-app {
+    margin: 0;
+    min-height: 100vh;
+  }
+  .alt-app .site-header {
+    gap: 8px 12px;
+  }
+  .alt-app .wordmark span {
+    display: none;
+  }
+  .alt-app .reading-section,
+  .alt-app .alt-schedule {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .alt-app .pool-toolbar {
+    align-items: flex-start;
+  }
+  .alt-app .section-top {
+    align-items: center;
+  }
+  .alt-row {
+    grid-template-columns: 20px 22px minmax(0, 1fr);
+  }
+}

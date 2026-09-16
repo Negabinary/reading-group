@@ -60,3 +60,11 @@ test('browser cross-origin and form posts are refused; request limits use UTF-8 
     'signIn',
   );
 });
+
+test('scheduling names cannot create member identities, including normalized variants', async () => {
+  for (const name of ['Time', 'location', ' TIME ', 'Ｌｏｃａｔｉｏｎ'])
+    await assert.rejects(
+      parseCommand(post({ action: 'signIn', args: [name] })),
+      /scheduling fields/,
+    );
+});

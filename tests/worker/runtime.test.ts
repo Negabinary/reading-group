@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { generateKeyPairSync } from 'node:crypto';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
@@ -36,6 +36,11 @@ test(
     await writeFile(
       join(directory, 'index.html'),
       '<!doctype html><title>Reading group</title>',
+    );
+    await mkdir(join(directory, 'alt'));
+    await writeFile(
+      join(directory, 'alt/index.html'),
+      '<!doctype html><title>Text view</title>',
     );
     let activeGoogleReads = 0,
       maxActiveGoogleReads = 0,
@@ -112,6 +117,24 @@ test(
       const asset = await mf.dispatchFetch('https://reading.example/');
       assert.equal(asset.status, 200);
       assert.match(await asset.text(), /Reading group/);
+      for (const path of ['/alt', '/alt/']) {
+        let response = await mf.dispatchFetch(`https://reading.example${path}`);
+        if (
+          response.status === 307 ||
+          response.status === 308 ||
+          response.status === 301 ||
+          response.status === 302
+        ) {
+          response = await mf.dispatchFetch(
+            new URL(
+              response.headers.get('Location')!,
+              `https://reading.example${path}`,
+            ).href,
+          );
+        }
+        assert.equal(response.status, 200);
+        assert.match(await response.text(), /Text view/);
+      }
       const health = await mf.dispatchFetch(
         'https://reading.example/api?action=health',
       );
