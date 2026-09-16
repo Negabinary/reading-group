@@ -62,16 +62,63 @@ Old VITE_APPS_SCRIPT_URL settings and .env.local do not affect the new live fron
 
 The workflow is **.github/workflows/cloudflare.yml**. Push it with the source and lockfile. Every pull request and push to main runs tests, type checks, formatting, and a deployment dry run. Production deployment remains skipped until CLOUDFLARE_ACCOUNT_ID is set.
 
-1. In Cloudflare, open [My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens) and create a token using **Edit Cloudflare Workers**. Limit its account resources to this reading group's Cloudflare account. For this workers.dev deployment, no custom domain or DNS-edit setup is needed.
-2. In [GitHub repository Actions secrets](https://github.com/Negabinary/reading-group/settings/secrets/actions), add **CLOUDFLARE_API_TOKEN**. Alternatively run **gh secret set CLOUDFLARE_API_TOKEN** and enter the token at its prompt.
-3. After running setup:local, upload the two Google settings and enable the deployment:
+### 3a. Create the Cloudflare deployment token
+
+This token lets GitHub upload the website and API to your Cloudflare account.
+
+1. Open [Cloudflare → My Profile → API Tokens](https://dash.cloudflare.com/profile/api-tokens) while signed in. Click **Create Token**.
+2. Find **Edit Cloudflare Workers** in the template list and click **Use template** beside it. This pre-fills the permissions; it does not create or deploy a Worker yet.
+3. Fill in the token form as follows:
+
+| Field                       | What to enter/select                                                                                                                                           |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Token name                  | `MPLSE GitHub deployment` — a label to help you recognize it later.                                                                                            |
+| Permissions                 | Keep the template's **Account** and **User** permissions. Remove its **Zone → Workers Routes → Edit** row for this workers.dev-only deployment.                |
+| Account Resources           | Select **Include → Specific account → your Cloudflare account's name**. This is the account you opened in section 1; it may be named after your email address. |
+| Zone Resources              | No zone is needed after removing the Zone permission. A zone means a custom domain managed in Cloudflare; workers.dev is provided by Cloudflare.               |
+| Client IP Address Filtering | Leave blank. GitHub's deployment runs on GitHub's servers, not your laptop's IP address.                                                                       |
+| TTL / expiration            | Leave the optional dates blank for ongoing deployments. If you choose an expiration date, replace the GitHub secret before it expires.                         |
+
+4. Click **Continue to summary**, check that only your intended account is included, then click **Create Token**.
+5. Copy the generated token value. Cloudflare shows it only once; keep this page open until you have saved it in GitHub below. Copy the token itself, not its name or the example curl command.
+
+The template grants permissions to act on Workers; **Account Resources** limits which account those permissions apply to. See Cloudflare's [token creation instructions](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/), [template permissions](https://developers.cloudflare.com/fundamentals/api/reference/template/), and [Workers route permissions](https://developers.cloudflare.com/workers/authorization/workers/#routes-and-custom-domains).
+
+### 3b. Save that token in GitHub
+
+1. Open [this repository's Actions secrets settings](https://github.com/Negabinary/reading-group/settings/secrets/actions). The navigation path is **reading-group → Settings → Secrets and variables → Actions**.
+2. On the **Secrets** tab, click **New repository secret**.
+3. In **Name**, enter exactly `CLOUDFLARE_API_TOKEN`.
+4. In **Secret**, paste the token value you just copied from Cloudflare, without quotation marks or an `Authorization: Bearer` prefix.
+5. Click **Add secret**. You should now see `CLOUDFLARE_API_TOKEN` in the repository secrets list. The value stays hidden. If that name already exists, use its edit button to replace the value.
+
+Choose a **repository secret**, not a repository variable or an environment secret. This is where our setup helper and workflow expect the token. [GitHub's secret instructions](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets#creating-secrets-for-a-repository) show the same fields.
+
+If you prefer the terminal, the equivalent command is `gh secret set CLOUDFLARE_API_TOKEN` from this repository. Paste the token at its prompt, then press Enter. Use either the browser or terminal method once.
+
+### 3c. Upload the Google settings and enable deployment
+
+First finish **section 2**: `npm run setup:local -- ...` must have succeeded and created `secrets.local.json`. That file supplies the Google credentials automatically; this step does not ask you to paste the private key again.
+
+1. Open a terminal in this repository. If the preview server is still running, open a second terminal. Run:
+
+```sh
+cd /Users/matt/git/reading-group
+gh auth status
+```
+
+If GitHub CLI reports that you are not logged in, run `gh auth login` and sign in to **GitHub.com** using the browser, with an account that can manage this repository's settings.
+
+2. Copy your **Cloudflare Account ID** from **Workers & Pages → Account Details**. This is the 32-character ID from section 1, not the API token, email address, or workers.dev subdomain.
+3. Run this as one command, replacing `YOUR_CLOUDFLARE_ACCOUNT_ID` with that ID:
 
 ```sh
 npm run setup:github -- YOUR_CLOUDFLARE_ACCOUNT_ID
-gh workflow run cloudflare.yml --ref main
 ```
 
-The helper uses your existing gh login, sends secrets through standard input, and does not print credential values. It configures:
+The helper checks that the Cloudflare token was saved, uploads the two Google settings from `secrets.local.json`, then sets the account ID to enable future deployments. It uses your existing gh login and does not print credential values. Success prints **GitHub secrets and account ID configured. No credential values were printed.** It does not start a deployment by itself.
+
+4. To check the result in GitHub, the **Secrets** tab should contain these three secret names, and the **Variables** tab should contain the account ID:
 
 | GitHub setting              | Kind                | Value                              |
 | --------------------------- | ------------------- | ---------------------------------- |
@@ -80,10 +127,21 @@ The helper uses your existing gh login, sends secrets through standard input, an
 | GOOGLE_SHEET_ID             | Repository secret   | Spreadsheet ID                     |
 | GOOGLE_SERVICE_ACCOUNT_JSON | Repository secret   | Service account JSON key           |
 
-You can also enter these settings through GitHub's UI. GOOGLE_SERVICE_ACCOUNT_JSON must be the JSON object from the downloaded file, not its filename or just its private_key field.
+If you prefer to configure everything through GitHub's UI, add the two Google settings using **Secrets → New repository secret**, then add the account ID using **Variables → New repository variable**. For `GOOGLE_SERVICE_ACCOUNT_JSON`, paste the full contents of the original downloaded Google JSON key file, including its outer braces. For `GOOGLE_SHEET_ID`, use the part of the sheet URL between `/d/` and `/edit`. Add `CLOUDFLARE_ACCOUNT_ID` last. This replaces running `setup:github`.
 
-4. Watch **Actions → Test and deploy reading group**. After checks pass, it uploads the website and Worker, configures encrypted Worker secrets, and checks the deployed API against the real sheet. The **cloudflare** environment links to the new site.
-5. Subsequent pushes to main update the website and API together. No Apps Script copy/paste is needed.
+### 3d. Start the first deployment
+
+Once the settings above are saved, run this from the repository:
+
+```sh
+gh workflow run cloudflare.yml --ref main
+```
+
+Or use the browser: open [Actions → Test and deploy reading group](https://github.com/Negabinary/reading-group/actions/workflows/cloudflare.yml), click **Run workflow**, select branch **main**, and click the green **Run workflow** button. [GitHub's manual workflow instructions](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow) show this flow.
+
+Open the new run. The **check** job runs first, followed by **deploy**. Deployment uploads the website and Worker, configures encrypted Worker secrets, and checks the deployed API against the real sheet. The **cloudflare** environment links to the new site. If **deploy** is skipped, check that `CLOUDFLARE_ACCOUNT_ID` exists under repository **Variables** and that you ran the workflow on **main**.
+
+Subsequent pushes to main update the website and API together. No Apps Script copy/paste is needed.
 
 Do not upload secrets.local.json, .dev.vars, or the downloaded key as GitHub source files or build artifacts. Credentials are used only by the Worker; the browser bundle contains no Google credentials.
 

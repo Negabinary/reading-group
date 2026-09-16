@@ -877,6 +877,23 @@ a svg {
     serif;
   margin-top: 12px;
 }
+.paper-description {
+  margin: 18px 0 24px;
+  font-size: 14px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+.session-paper .paper-description {
+  margin-top: 0;
+}
+.session-authors:has(+ .paper-description) {
+  margin-bottom: 14px;
+}
 .paper-rules {
   margin: 24px 0;
   opacity: 0.16;

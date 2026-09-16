@@ -421,7 +421,7 @@ function Suggest({
               maxLength={2000}
               value={paper.notes}
               onChange={(event) => field('notes', event.target.value)}
-              placeholder="Optional"
+              placeholder="Optional: what's this paper about, and why should we read it?"
             />
           </label>
           {error && (
@@ -496,11 +496,15 @@ function PaperCard({
         </button>
       </h3>
       {paper.authors && <p className="authors">{paper.authors}</p>}
-      <div className="paper-rules" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-      </div>
+      {paper.notes.trim() ? (
+        <p className="paper-description">{paper.notes}</p>
+      ) : (
+        <div className="paper-rules" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+        </div>
+      )}
       <div className="paper-bottom">
         <div className="paper-credit">
           <span>{archived ? dateLabel(paper.date, true) : suggested}</span>
@@ -557,7 +561,7 @@ export default function App() {
   });
   const [view, setView] = useState<View>('pool');
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<PaperSort>('votes');
+  const [sort, setSort] = useState<PaperSort>('newest');
   const { since, returning, recordVisit } = useVisit();
   const [modal, setModal] = useState<'signin' | 'suggest' | 'account' | null>(
     null,
@@ -848,9 +852,9 @@ export default function App() {
                       setSort(event.target.value as PaperSort)
                     }
                   >
+                    <option value="newest">Newest</option>
                     <option value="votes">Votes</option>
                     <option value="score">Score</option>
-                    <option value="newest">Newest</option>
                   </select>
                 </label>
               )}

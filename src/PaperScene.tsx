@@ -197,6 +197,9 @@ export function PaperScene({
                 {paper.authors && (
                   <p className="session-authors">{paper.authors}</p>
                 )}
+                {paper.notes.trim() && (
+                  <p className="paper-description">{paper.notes}</p>
+                )}
                 <div className="session-paper-bottom">
                   <button
                     className="text-link"
