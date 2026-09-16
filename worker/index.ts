@@ -3,6 +3,9 @@ import { parseCommand } from './commands';
 import { ApiError, failure, success } from './errors';
 import { GoogleSheets, type GoogleEnv } from './google';
 import { ReadingSheet } from './sheets';
+import { calendarFeed } from './calendar';
+import { CALENDAR_PATH } from '../src/schedule';
+import type { GroupState } from '../src/types';
 
 export interface Env extends GoogleEnv {
   ASSETS: Fetcher;
@@ -15,13 +18,33 @@ export class SheetCoordinator implements DurableObject {
   private sheet: ReadingSheet;
   constructor(
     private ctx: DurableObjectState,
-    env: GoogleEnv,
+    private env: GoogleEnv,
   ) {
     this.sheet = new ReadingSheet(new GoogleSheets(env), env.GOOGLE_SHEET_ID);
   }
   async fetch(request: Request): Promise<Response> {
     return this.ctx.blockConcurrencyWhile(async () => {
       try {
+        if (new URL(request.url).pathname === CALENDAR_PATH) {
+          const state = (await this.sheet.execute(
+            { action: 'getState' },
+            AbortSignal.timeout(24000),
+          )) as GroupState;
+          const feed = await calendarFeed(
+            state,
+            request.url,
+            this.env.GOOGLE_SHEET_ID,
+          );
+          return new Response(request.method === 'HEAD' ? null : feed, {
+            headers: {
+              'Content-Type': 'text/calendar; charset=utf-8',
+              'Content-Disposition':
+                'inline; filename="mplse-reading-group.ics"',
+              'Cache-Control': 'no-cache',
+              'X-Content-Type-Options': 'nosniff',
+            },
+          });
+        }
         const command = await parseCommand(request);
         if (command.action === 'health' || command.action === 'searchPapers')
           throw new ApiError('Unknown sheet action.');
@@ -60,12 +83,24 @@ async function search(query: string) {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const path = new URL(request.url).pathname;
-    if (path !== '/api' && !path.startsWith('/api/'))
+    if (path !== CALENDAR_PATH && path !== '/api' && !path.startsWith('/api/'))
       return env.ASSETS.fetch(request);
     try {
-      if (path !== '/api' && path !== '/api/')
+      if (
+        path === CALENDAR_PATH &&
+        request.method !== 'GET' &&
+        request.method !== 'HEAD'
+      )
+        return new Response('Use GET or HEAD for the calendar.', {
+          status: 405,
+          headers: { Allow: 'GET, HEAD' },
+        });
+      if (path !== CALENDAR_PATH && path !== '/api' && path !== '/api/')
         throw new ApiError('Unknown API route.', 404);
-      const command = await parseCommand(request.clone());
+      const command =
+        path === CALENDAR_PATH
+          ? { action: 'getState' as const }
+          : await parseCommand(request.clone());
       if (command.action === 'health')
         return success({
           service: 'mplse-reading-group',

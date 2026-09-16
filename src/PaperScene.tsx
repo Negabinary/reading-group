@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { ArrowDown, ArrowUpRight, Pause, Play } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUpRight,
+  CalendarDays,
+  Pause,
+  Play,
+} from 'lucide-react';
 import type { RankedPaper } from './types';
+import { sessionDetails, timeLabel, ZOOM_URL } from './schedule';
 
 const fullDate = (value: string) =>
   new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
@@ -16,11 +23,15 @@ export function PaperScene({
   papers,
   loading,
   onDetails,
+  timeZone,
+  onCalendar,
 }: {
   upcoming: RankedPaper[];
   papers: RankedPaper[];
   loading: boolean;
   onDetails: (id: string) => void;
+  timeZone?: string;
+  onCalendar?: () => void;
 }) {
   const scene = useRef<HTMLElement>(null);
   const [paused, setPaused] = useState(false);
@@ -33,6 +44,7 @@ export function PaperScene({
   const date = upcoming[0]?.date;
   const session = upcoming.filter((paper) => paper.date === date);
   const later = upcoming.filter((paper) => paper.date !== date);
+  const schedule = date ? sessionDetails(session, date) : null;
 
   useEffect(() => {
     if (typeof matchMedia !== 'function') return;
@@ -98,17 +110,25 @@ export function PaperScene({
     >
       <div className="scene-topline">
         <h2 id="session-label">Next session</h2>
-        {!reduced && (
-          <button
-            className="motion-button"
-            onClick={() => setPaused((value) => !value)}
-            aria-label={paused ? 'Resume paper motion' : 'Pause paper motion'}
-            aria-pressed={paused}
-          >
-            {paused ? <Play size={12} /> : <Pause size={12} />} Motion{' '}
-            {paused ? 'off' : 'on'}
-          </button>
-        )}
+        <div className="scene-actions">
+          {onCalendar && (
+            <button className="calendar-button" onClick={onCalendar}>
+              <CalendarDays size={14} />
+              Subscribe
+            </button>
+          )}
+          {!reduced && (
+            <button
+              className="motion-button"
+              onClick={() => setPaused((value) => !value)}
+              aria-label={paused ? 'Resume paper motion' : 'Pause paper motion'}
+              aria-pressed={paused}
+            >
+              {paused ? <Play size={12} /> : <Pause size={12} />} Motion{' '}
+              {paused ? 'off' : 'on'}
+            </button>
+          )}
+        </div>
       </div>
       <div className="scene-space">
         <div className="room" aria-hidden="true">
@@ -167,6 +187,26 @@ export function PaperScene({
             <span className="date-day date-unset" aria-hidden="true">
               —
             </span>
+          )}
+          {schedule && (
+            <div className="session-logistics">
+              {!!schedule.times.length && (
+                <p>
+                  {schedule.times.map(timeLabel).join(' / ')}
+                  {timeZone && (
+                    <span className="session-timezone">
+                      {timeZone.replace(/_/g, ' ')}
+                    </span>
+                  )}
+                </p>
+              )}
+              {!!schedule.locations.length && (
+                <p>{schedule.locations.join(' / ')}</p>
+              )}
+              <a href={ZOOM_URL} target="_blank" rel="noreferrer">
+                Join on Zoom <ArrowUpRight size={13} />
+              </a>
+            </div>
           )}
         </div>
         <div

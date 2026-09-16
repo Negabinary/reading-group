@@ -7,6 +7,7 @@ import {
   validDate,
 } from '../src/domain';
 import type { GroupState, Paper } from '../src/types';
+import { SESSION_MINUTES } from '../src/schedule';
 import type { SheetCommand } from './commands';
 import { ApiError } from './errors';
 import type { GoogleSheets } from './google';
@@ -25,6 +26,7 @@ export const HEADERS = [
   'Date',
 ];
 export const USER_PREFIX = 'mplse-user:';
+const SCHEDULE_FIELDS = ['Time', 'Location'] as const;
 export interface Cell {
   effectiveValue?: {
     stringValue?: string;
@@ -99,6 +101,36 @@ function discussionDate(cell: Cell | undefined, row: number): string {
     throw new ApiError(`Date in row ${row} must be a date or YYYY-MM-DD.`, 409);
   return date;
 }
+function discussionTime(cell: Cell | undefined, row: number): string {
+  const raw = value(cell).trim();
+  if (!raw) return '';
+  const number = cell?.effectiveValue?.numberValue;
+  if (
+    number !== undefined &&
+    Number.isFinite(number) &&
+    number >= 0 &&
+    number < 1
+  ) {
+    const minutes = Math.round(number * 1440);
+    if (minutes < 1440)
+      return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+  } else if (number === undefined) {
+    const match = raw.match(/^(\d{1,2}):(\d{2})(?::00)?\s*(am|pm)?$/i);
+    if (match) {
+      let hour = Number(match[1]);
+      const minute = Number(match[2]);
+      const period = match[3]?.toLowerCase();
+      if (minute < 60 && (period ? hour >= 1 && hour <= 12 : hour < 24)) {
+        if (period) hour = (hour % 12) + (period === 'pm' ? 12 : 0);
+        return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+      }
+    }
+  }
+  throw new ApiError(
+    `Time in row ${row} must be a time such as 14:30 or 2:30 PM.`,
+    409,
+  );
+}
 function parts(date: Date, timeZone: string) {
   return Object.fromEntries(
     new Intl.DateTimeFormat('en-US', {
@@ -165,6 +197,7 @@ export function decodeSheet(
   const repairs: SheetWrite[] = [];
   const members: GroupState['members'] = [];
   const columns = new Map<string, number>();
+  const scheduleColumns = new Map<string, number>();
   let width = HEADERS.length;
   // Ignore formatting-only cells, but never overwrite data below a blank header.
   rows.forEach((row) =>
@@ -175,6 +208,25 @@ export function decodeSheet(
   for (let column = HEADERS.length; column < width; column++) {
     const name = normalizeName(value(headers[column]));
     if (!name) continue;
+    const note = headers[column]?.note || '';
+    // Existing members called Time/Location retain their identities and votes.
+    if (
+      SCHEDULE_FIELDS.some((field) => field === name) &&
+      !note.startsWith(USER_PREFIX)
+    ) {
+      if (scheduleColumns.has(name))
+        throw new ApiError(
+          `Keep only one ${name} column in the Papers tab.`,
+          409,
+        );
+      scheduleColumns.set(name, column);
+      continue;
+    }
+    if (note.startsWith('mplse-field:'))
+      throw new ApiError(
+        'Keep the scheduling column headers named Time and Location.',
+        409,
+      );
     if (
       members.some(
         (m) => m.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
@@ -184,7 +236,6 @@ export function decodeSheet(
         `Two member columns are named “${name}”. Give each person a distinct name.`,
         409,
       );
-    const note = headers[column]?.note || '';
     const stored = note.match(/^mplse-user:([^\s]+)/)?.[1];
     const id = stored || crypto.randomUUID();
     if (columns.has(id))
@@ -232,6 +283,8 @@ export function decodeSheet(
       suggestedBy: value(row[8]),
       addedAt: addedAt(row[9], timezone),
       date: discussionDate(row[10], index + 1),
+      time: discussionTime(row[scheduleColumns.get('Time') ?? -1], index + 1),
+      location: value(row[scheduleColumns.get('Location') ?? -1]).trim(),
       votes: [],
       attendance: [],
     };
@@ -256,11 +309,13 @@ export function decodeSheet(
     papers,
     sheetUrl: `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit#gid=${sheetId}`,
     today: `${p.year}-${p.month}-${p.day}`,
+    timeZone: timezone,
   };
   return {
     state,
     repairs,
     columns,
+    scheduleColumns,
     paperRows,
     sheetId,
     width,
@@ -284,8 +339,69 @@ export class ReadingSheet {
       signal,
     );
     const model = decodeSheet(document, this.spreadsheetId);
-    const { state, columns, paperRows, sheetId, width, grid } = model;
+    const { state, columns, paperRows, sheetId, grid, scheduleColumns } = model;
+    let width = model.width;
+    let gridWidth = grid.columnCount;
     const writes = [...model.repairs];
+    // Extend at the right edge: no existing cell or member column moves.
+    // This is committed with repairs/mutations only after all validation succeeds.
+    for (const field of SCHEDULE_FIELDS) {
+      if (scheduleColumns.has(field)) continue;
+      const column = width++;
+      if (width > gridWidth) {
+        writes.push({
+          appendDimension: {
+            sheetId,
+            dimension: 'COLUMNS',
+            length: width - gridWidth,
+          },
+        });
+        gridWidth = width;
+      }
+      writes.push(
+        updateCell(
+          sheetId,
+          0,
+          column,
+          {
+            ...textCell(field),
+            note:
+              field === 'Time'
+                ? `mplse-field:time\nStart time in the spreadsheet time zone (File → Settings). Calendar sessions last ${SESSION_MINUTES} minutes. Blank means all-day; papers on the same date share a session.`
+                : 'mplse-field:location\nRoom or meeting location. Papers on the same date share a session. The calendar also includes the group Zoom link.',
+            userEnteredFormat: {
+              backgroundColor: {
+                red: 23 / 255,
+                green: 45 / 255,
+                blue: 41 / 255,
+              },
+              textFormat: {
+                foregroundColor: { red: 1, green: 1, blue: 1 },
+                bold: true,
+              },
+            },
+          },
+          'userEnteredValue,note,userEnteredFormat',
+        ),
+      );
+      if (field === 'Time')
+        writes.push({
+          repeatCell: {
+            range: {
+              sheetId,
+              startRowIndex: 1,
+              startColumnIndex: column,
+              endColumnIndex: column + 1,
+            },
+            cell: {
+              userEnteredFormat: {
+                numberFormat: { type: 'TIME', pattern: 'h:mm am/pm' },
+              },
+            },
+            fields: 'userEnteredFormat.numberFormat',
+          },
+        });
+    }
     let result: unknown = state;
     if (command.action === 'signIn') {
       let member = state.members.find(
@@ -293,12 +409,12 @@ export class ReadingSheet {
       );
       if (!member) {
         member = { id: crypto.randomUUID(), name: command.name };
-        if (width >= grid.columnCount)
+        if (width >= gridWidth)
           writes.push({
             appendDimension: {
               sheetId,
               dimension: 'COLUMNS',
-              length: width - grid.columnCount + 1,
+              length: width - gridWidth + 1,
             },
           });
         writes.push(
@@ -392,6 +508,8 @@ export class ReadingSheet {
         addedAt: new Date().toISOString(),
         suggestedBy: command.memberId,
         date: '',
+        time: '',
+        location: '',
         votes: [command.memberId],
         attendance: [],
       };

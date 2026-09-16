@@ -225,6 +225,65 @@ a svg {
 .motion-button:hover {
   color: var(--paper);
 }
+.scene-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px 24px;
+  align-items: flex-start;
+}
+.calendar-button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  font: 11px var(--mono);
+  color: var(--paper);
+  background: #171a17e6;
+  border: 1px solid var(--line);
+}
+.calendar-button:hover {
+  color: var(--accent);
+}
+.session-logistics {
+  margin-top: 24px;
+  padding: 12px 16px;
+  width: fit-content;
+  background: #171a17e6;
+  border-left: 1px solid var(--line);
+  font: 12px/1.7 var(--mono);
+  max-width: 320px;
+  overflow-wrap: anywhere;
+}
+.session-logistics p + p {
+  margin-top: 8px;
+}
+.session-timezone {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+}
+.session-logistics a {
+  display: inline-block;
+  margin-top: 12px;
+  pointer-events: auto;
+  border-bottom: 1px solid var(--muted);
+}
+.calendar-subscription p,
+.calendar-subscription li {
+  font:
+    14px/1.6 'DM Sans',
+    sans-serif;
+}
+.calendar-subscription ol {
+  padding-left: 22px;
+}
+.calendar-subscription a {
+  text-decoration: underline;
+}
+.scheduled-detail svg {
+  flex-shrink: 0;
+}
 .scene-space {
   display: grid;
   grid-template-columns: 34% minmax(0, 1fr);

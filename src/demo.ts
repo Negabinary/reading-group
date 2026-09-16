@@ -43,6 +43,8 @@ export function createDemo(): GroupState {
     suggestedBy: members[Number(id.replace('paper-', '')) % members.length].id,
     addedAt: `${offset(-25)}T12:00:00.000Z`,
     date: days === undefined ? '' : offset(days),
+    time: days === undefined ? '' : '14:00',
+    location: days === undefined ? '' : 'Reading room',
     votes: voters(ids),
     attendance: voters(attendance),
   });
@@ -50,6 +52,7 @@ export function createDemo(): GroupState {
     today,
     members,
     sheetUrl: '',
+    timeZone: 'America/Detroit',
     papers: [
       paper(
         'paper-1',

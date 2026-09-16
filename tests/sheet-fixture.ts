@@ -109,6 +109,16 @@ export class SheetFixture {
       } else if (request.setDataValidation) {
         assert.equal(request.setDataValidation.range.sheetId, 42);
         assert.equal(request.setDataValidation.rule.strict, true);
+      } else if (request.repeatCell) {
+        assert.equal(request.repeatCell.range.sheetId, 42);
+        assert.equal(
+          request.repeatCell.fields,
+          'userEnteredFormat.numberFormat',
+        );
+        assert.deepEqual(
+          request.repeatCell.cell.userEnteredFormat.numberFormat,
+          { type: 'TIME', pattern: 'h:mm am/pm' },
+        );
       } else throw new Error('Unrecognized Sheets write in test');
     }
     this.writes.push(structuredClone(body.requests));

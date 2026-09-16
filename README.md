@@ -21,7 +21,7 @@ Paper searches are real network requests. DBLP is tried first, then Crossref if 
 
 ## Deploy with Google Sheets and Cloudflare
 
-Follow [DEPLOYMENT.md](DEPLOYMENT.md) to create the free accounts, share the existing sheet with a service account, test locally, and configure GitHub deployment. No spreadsheet migration or Apps Script setup run is needed.
+Follow [DEPLOYMENT.md](DEPLOYMENT.md) to create the free accounts, share the existing sheet with a service account, test locally, and configure GitHub deployment. No manual spreadsheet migration or Apps Script setup run is needed. The backend adds missing Time and Location columns on the first successful sheet request.
 
 Cloudflare serves the frontend in dist/site and a same-origin /api endpoint. The Worker talks directly to the Google Sheets API, avoiding Apps Script's ContentService redirects and browser Google-account sessions. A free-tier Durable Object coordinates concurrent sheet operations; application data stays in the sheet. Google credentials live in encrypted Worker secrets and never enter the browser bundle.
 
@@ -29,22 +29,26 @@ GitHub Actions deploys frontend and API changes together. Until credentials are 
 
 ## The single-sheet layout
 
-Keep the first eleven columns in this order. Member columns follow Date; they can be renamed, reordered, added, or removed.
+Keep the first eleven columns in this order. After Date, the Time and Location columns can appear among the member columns. Member columns can be renamed, reordered, added, or removed.
 
-| Column   | Header        | Purpose                                                                                                    |
-| -------- | ------------- | ---------------------------------------------------------------------------------------------------------- |
-| A        | ID            | Stable paper identity. Generated for new rows with a title; leave blank when adding a paper manually.      |
-| B        | Title         | Required paper title. A row without a title is ignored.                                                    |
-| C        | Authors       | Author names.                                                                                              |
-| D        | Year          | Publication year.                                                                                          |
-| E        | Venue         | Conference, journal, or other source.                                                                      |
-| F        | URL           | Complete HTTP/HTTPS link to the paper.                                                                     |
-| G        | Topic         | Legacy column, unused by the interface. Keep its header for compatibility; new suggestions leave it blank. |
-| H        | Notes         | Why someone suggested it.                                                                                  |
-| I        | Suggested by  | Stable member ID, filled by the app. Can be blank on manual additions.                                     |
-| J        | Added         | ISO creation timestamp, filled by the app.                                                                 |
-| K        | Date          | Discussion date, formatted `YYYY-MM-DD`. Blank = in the voting pool.                                       |
-| L onward | Person’s name | That person’s vote and attendance for each paper.                                                          |
+| Column  | Header        | Purpose                                                                                                    |
+| ------- | ------------- | ---------------------------------------------------------------------------------------------------------- |
+| A       | ID            | Stable paper identity. Generated for new rows with a title; leave blank when adding a paper manually.      |
+| B       | Title         | Required paper title. A row without a title is ignored.                                                    |
+| C       | Authors       | Author names.                                                                                              |
+| D       | Year          | Publication year.                                                                                          |
+| E       | Venue         | Conference, journal, or other source.                                                                      |
+| F       | URL           | Complete HTTP/HTTPS link to the paper.                                                                     |
+| G       | Topic         | Legacy column, unused by the interface. Keep its header for compatibility; new suggestions leave it blank. |
+| H       | Notes         | Why someone suggested it.                                                                                  |
+| I       | Suggested by  | Stable member ID, filled by the app. Can be blank on manual additions.                                     |
+| J       | Added         | ISO creation timestamp, filled by the app.                                                                 |
+| K       | Date          | Discussion date, formatted `YYYY-MM-DD`. Blank = in the voting pool.                                       |
+| After K | Time          | Optional start time, such as `14:30` or `2:30 PM`, in the spreadsheet time zone.                           |
+| After K | Location      | Optional room/building or meeting location.                                                                |
+| After K | Person’s name | That person’s vote and attendance for each paper.                                                          |
+
+The app adds missing Time and Location headers at the right edge of the used sheet, without moving or overwriting existing columns. You can move these entire columns beside Date if you prefer; keep their headers and notes. The Time column is formatted as a time. Existing member columns with identity notes remain members even if someone is named Time or Location. For new member headers, use a distinct name rather than these reserved scheduling labels.
 
 Each member cell accepts:
 
@@ -57,7 +61,7 @@ Each member cell accepts:
 
 **Preserve votes when recording attendance:** change `V` to `VA` when a voter attends. Use `A` for an attendee who did not vote. Retain `V` for a voter who missed the meeting. The reader also understands `1`/`TRUE` as votes and `0`/`FALSE` as blank, though the app’s dropdowns use V/A/VA.
 
-- **Schedule a discussion:** enter a date in K. The paper leaves the pool immediately and voting closes, preserving its selection history. Multiple papers can share one date.
+- **Schedule a discussion:** enter a date in K, plus optional Time and Location. The paper leaves the pool immediately and voting closes, preserving its selection history. Multiple papers share one session per date. Fill Time/Location on one of that day's paper rows, or repeat identical values on each; conflicting values stop the calendar feed with an explanatory error.
 - **Record attendance:** mark A or VA on the dated row. For several papers discussed in one meeting, attendance on any one of their rows counts for that date.
 - **Reopen voting:** clear the date. A past or scheduled date can be changed directly in the sheet.
 - **Rename a person:** edit their column header and keep the header note. The note holds a stable ID so their votes and browser sign-in survive renames.
@@ -67,6 +71,14 @@ Each member cell accepts:
 - **Direct sheet edits:** the app refreshes every 30 seconds while visible, on returning to the tab, or when Refresh is pressed. One Cloudflare Durable Object serializes app reads and writes. Direct edits in Google Sheets do not acquire that lock; avoid rearranging rows or columns in the middle of active app writes.
 
 Votes and scores are calculated from the sheet on each refresh. They are displayed on the site; there are no computed total columns to maintain in the sheet.
+
+## Subscribe to sessions
+
+The production site serves a public calendar at `/calendar.ics`. Click **Subscribe** beside Next session to copy its URL. In Google Calendar on a computer, choose **Other calendars → + → From URL**, paste it, then **Add calendar**. This is a subscription, so future sheet edits are picked up when Google refreshes the calendar; importing a downloaded file would only add a snapshot. [Google's subscription instructions](https://support.google.com/calendar/answer/37100?hl=en).
+
+Every dated session includes all that day's papers and their links, the reading group website, room/location, and the group's Zoom link: <https://umich.zoom.us/j/93467587435>. Timed events last **60 minutes**. Times use **Google Sheets → File → Settings → Time zone** and account for daylight saving; subscribers see the corresponding time in their calendar's own time zone. A blank Time creates an all-day event. A blank Location uses the Zoom URL as the event location.
+
+Past and future dated rows are included. Clearing every paper's date for a session removes it from the feed. The event identity stays the same when you edit its title, time, room, or papers; moving the date removes the old session and adds the new one. Calendar clients control refresh timing, so consult the website for last-minute changes. The local demo shows example times and rooms but does not offer a live subscription.
 
 ## Scoring
 

@@ -9,6 +9,7 @@ import {
   Clock3,
   ExternalLink,
   Loader2,
+  MapPin,
   Plus,
   Search,
   Users,
@@ -25,6 +26,7 @@ import type {
 } from './types';
 import { PaperScene } from './PaperScene';
 import { useVisit } from './useVisit';
+import { CALENDAR_PATH, sessionDetails, timeLabel, ZOOM_URL } from './schedule';
 
 type View = 'pool' | 'new' | 'mine' | 'archive';
 type Intent = { kind: 'suggest' } | { kind: 'vote'; id: string };
@@ -109,6 +111,73 @@ function Modal({
       </div>
       {children}
     </dialog>
+  );
+}
+
+function CalendarSubscription({ onClose }: { onClose: () => void }) {
+  const url = new URL(CALENDAR_PATH, window.location.origin).href;
+  const [message, setMessage] = useState('');
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <Modal title="Subscribe to the calendar" onClose={onClose}>
+      <div className="form-stack calendar-subscription">
+        <p>
+          Keep reading group sessions in your calendar, with the papers, room,
+          and Zoom link.
+        </p>
+        <label>
+          Calendar URL
+          <input
+            ref={input}
+            readOnly
+            value={url}
+            onFocus={(event) => event.target.select()}
+          />
+        </label>
+        <button
+          className="button button-dark"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(url);
+              setMessage('Calendar URL copied.');
+            } catch {
+              input.current?.focus();
+              input.current?.select();
+              setMessage('Select and copy the calendar URL above.');
+            }
+          }}
+        >
+          Copy calendar URL
+        </button>
+        {message && <p role="status">{message}</p>}
+        <p>
+          In{' '}
+          <a
+            href="https://calendar.google.com/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Google Calendar
+          </a>{' '}
+          on a computer:
+        </p>
+        <ol>
+          <li>
+            Next to <strong>Other calendars</strong>, click <strong>+</strong>.
+          </li>
+          <li>
+            Choose <strong>From URL</strong> and paste the calendar URL.
+          </li>
+          <li>
+            Click <strong>Add calendar</strong>.
+          </li>
+        </ol>
+        <p>
+          Subscribe once to receive schedule changes. Google Calendar refreshes
+          subscriptions on its own schedule, so changes may take time to appear.
+        </p>
+      </div>
+    </Modal>
   );
 }
 
@@ -563,9 +632,9 @@ export default function App() {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<PaperSort>('newest');
   const { since, returning, recordVisit } = useVisit();
-  const [modal, setModal] = useState<'signin' | 'suggest' | 'account' | null>(
-    null,
-  );
+  const [modal, setModal] = useState<
+    'signin' | 'suggest' | 'account' | 'calendar' | null
+  >(null);
   const [detailId, setDetailId] = useState('');
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
@@ -664,6 +733,8 @@ export default function App() {
       .includes(query.toLowerCase()),
   );
   const details = ranked.find((paper) => paper.id === detailId);
+  const schedule =
+    details?.date && state ? sessionDetails(state.papers, details.date) : null;
   const weights = useMemo(
     () =>
       state ? memberWeights(state.papers, state.members, state.today) : {},
@@ -785,6 +856,8 @@ export default function App() {
           papers={pool}
           loading={!state}
           onDetails={setDetailId}
+          timeZone={state?.timeZone}
+          onCalendar={isDemo ? undefined : () => setModal('calendar')}
         />
         <section
           className="reading-section"
@@ -937,6 +1010,7 @@ export default function App() {
           </button>
         </div>
       )}
+      {modal === 'calendar' && <CalendarSubscription onClose={closeModal} />}
       {modal === 'signin' && state && (
         <SignIn state={state} onClose={closeModal} onSignedIn={signedIn} />
       )}
@@ -1002,7 +1076,27 @@ export default function App() {
           </div>
           {details.date && (
             <p className="scheduled-detail">
-              <Clock3 size={17} /> {dateLabel(details.date)} · Voting closed
+              <Clock3 size={17} />
+              <span>
+                {dateLabel(details.date)}
+                {schedule?.times.length
+                  ? ` · ${schedule.times.map(timeLabel).join(' / ')} (${state.timeZone || 'sheet time'})`
+                  : ''}{' '}
+                · Voting closed
+              </span>
+            </p>
+          )}
+          {!!schedule?.locations.length && (
+            <p className="scheduled-detail">
+              <MapPin size={17} />
+              <span>{schedule.locations.join(' / ')}</span>
+            </p>
+          )}
+          {details.date && (
+            <p className="scheduled-detail">
+              <a href={ZOOM_URL} target="_blank" rel="noreferrer">
+                Join on Zoom <ExternalLink size={13} />
+              </a>
             </p>
           )}
           {details.notes && (

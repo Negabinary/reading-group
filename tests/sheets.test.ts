@@ -82,7 +82,7 @@ test('missing manual IDs are repaired once, after validating the entire sheet', 
   assert.equal(first.members[0].id, second.members[0].id);
   assert.equal(first.papers[0].id, second.papers[0].id);
   assert.equal(google.writes.length, 1);
-  assert.equal(google.writes[0].length, 2);
+  assert.equal(second.timeZone, 'America/Detroit');
   assert.match(
     google.document.sheets[0].data![0].rowData![0].values![11].note!,
     /An organizer note/,
@@ -188,19 +188,19 @@ test('sign-in reuses identities and grows the grid without overwriting a header'
     signal(),
   )) as any;
   assert.equal(existing.member.id, 'alex-id');
-  assert.equal(google.writes.length, 0);
+  assert.equal(google.writes.length, 1); // First request adds scheduling columns.
   const joined = (await sheet.execute(
     { action: 'signIn', name: '=New member' },
     signal(),
   )) as any;
   const doc = google.document.sheets[0];
-  assert.equal(doc.properties.gridProperties.columnCount, 14);
+  assert.equal(doc.properties.gridProperties.columnCount, 16);
   assert.equal(
-    doc.data![0].rowData![0].values![13].effectiveValue!.stringValue,
+    doc.data![0].rowData![0].values![15].effectiveValue!.stringValue,
     '=New member',
   );
   assert.match(
-    doc.data![0].rowData![0].values![13].note!,
+    doc.data![0].rowData![0].values![15].note!,
     new RegExp(joined.member.id),
   );
   assert.ok(!JSON.stringify(google.writes).includes('formulaValue'));
@@ -229,5 +229,131 @@ test('suggestions append literal text, initially vote, deduplicate, and never re
     /lost response/,
   );
   assert.equal(google.reads, 3);
+  assert.equal(google.writes.length, 1);
+});
+
+test('scheduling columns are added once without moving or changing any existing cells', async () => {
+  const google = new SheetFixture();
+  const before = structuredClone(google.document.sheets[0].data![0].rowData!);
+  const sheet = new ReadingSheet(google, 'sheet');
+  const state = (await sheet.execute(
+    { action: 'getState' },
+    signal(),
+  )) as GroupState;
+  const rows = google.document.sheets[0].data![0].rowData!;
+  assert.deepEqual(rows[0].values!.slice(0, 13), before[0].values);
+  assert.deepEqual(rows[1], before[1]);
+  assert.deepEqual(
+    rows[0].values!.slice(13).map((c) => c.effectiveValue?.stringValue),
+    ['Time', 'Location'],
+  );
+  assert.equal(state.members.length, 2);
+  assert.equal(state.papers[0].time, '');
+  assert.equal(state.papers[0].location, '');
+  await sheet.execute({ action: 'getState' }, signal());
+  assert.equal(google.writes.length, 1);
+  assert.equal(
+    google.document.sheets[0].properties.gridProperties.columnCount,
+    15,
+  );
+});
+
+test('time and location follow their headers, including beside Date; votes and new suggestions still work', async () => {
+  const google = new SheetFixture();
+  const rows = google.document.sheets[0].data![0].rowData!;
+  rows[0].values!.splice(11, 0, cell('Time'), cell('Location'));
+  rows[1].values!.splice(
+    11,
+    0,
+    {
+      effectiveValue: { numberValue: 14.5 / 24 },
+      effectiveFormat: { numberFormat: { type: 'TIME' } },
+    },
+    cell('Beyster 3725'),
+  );
+  google.document.sheets[0].properties.gridProperties.columnCount = 15;
+  const sheet = new ReadingSheet(google, 'sheet');
+  const state = (await sheet.execute(
+    {
+      action: 'setVote',
+      paperId: 'paper-1',
+      memberId: 'alex-id',
+      voted: false,
+    },
+    signal(),
+  )) as GroupState;
+  assert.equal(state.papers[0].time, '14:30');
+  assert.equal(state.papers[0].location, 'Beyster 3725');
+  assert.deepEqual(state.papers[0].attendance, ['alex-id']);
+  assert.deepEqual(state.papers[0].votes, ['sam-id']);
+  const added = (await sheet.execute(
+    { action: 'suggestPaper', paper: input, memberId: 'alex-id' },
+    signal(),
+  )) as GroupState;
+  assert.equal(added.members.length, 2);
+  assert.deepEqual(added.papers[1].votes, ['alex-id']);
+  const stored = google.document.sheets[0].data![0].rowData![2].values!;
+  assert.equal(stored[11].effectiveValue?.stringValue, '');
+  assert.equal(stored[12].effectiveValue?.stringValue, '');
+  assert.equal(stored[13].effectiveValue?.stringValue, 'V');
+});
+
+test('native midnight, text 24-hour and AM/PM times are normalized; invalid times fail without writes', async () => {
+  for (const [input, expected] of [
+    [0, '00:00'],
+    [1 / 24, '01:00'],
+    ['9:05', '09:05'],
+    ['2:30 PM', '14:30'],
+    ['12:00 am', '00:00'],
+    ['12:00 pm', '12:00'],
+    ['23:59:00', '23:59'],
+    ['', ''],
+    ['24:00', null],
+    ['2:60', null],
+    ['13:00 PM', null],
+    [-0.5, null],
+    [1.5, null],
+    ['tomorrow', null],
+  ] as const) {
+    const google = new SheetFixture();
+    const rows = google.document.sheets[0].data![0].rowData!;
+    rows[0].values![13] = cell('Time');
+    rows[1].values![13] =
+      typeof input === 'number'
+        ? { effectiveValue: { numberValue: input } }
+        : cell(input);
+    google.document.sheets[0].properties.gridProperties.columnCount = 14;
+    const read = new ReadingSheet(google, 'sheet').execute(
+      { action: 'getState' },
+      signal(),
+    );
+    if (expected === null) {
+      await assert.rejects(read, /Time in row 2/);
+      assert.equal(google.writes.length, 0);
+    } else assert.equal(((await read) as GroupState).papers[0].time, expected);
+  }
+});
+
+test('existing member named Time keeps its identity; duplicate schedule headers are rejected', async () => {
+  const google = new SheetFixture();
+  const rows = google.document.sheets[0].data![0].rowData!;
+  rows[0].values![11].effectiveValue!.stringValue = 'Time';
+  const sheet = new ReadingSheet(google, 'sheet');
+  const first = (await sheet.execute(
+    { action: 'getState' },
+    signal(),
+  )) as GroupState;
+  const second = (await sheet.execute(
+    { action: 'getState' },
+    signal(),
+  )) as GroupState;
+  assert.equal(first.members[0].id, 'alex-id');
+  assert.deepEqual(first, second);
+  const after = google.document.sheets[0].data![0].rowData!;
+  after[0].values!.push(cell('Location'));
+  await assert.rejects(
+    sheet.execute({ action: 'getState' }, signal()),
+    /only one Location/,
+  );
   assert.equal(google.writes.length, 1);
 });

@@ -12,7 +12,7 @@ import {
   Response as RuntimeResponse,
   type Request as RuntimeRequest,
 } from 'miniflare';
-import { SheetFixture } from '../sheet-fixture';
+import { cell, SheetFixture } from '../sheet-fixture';
 
 test(
   'real Workers runtime serves assets, serializes concurrent sheet edits, and recovers after errors',
@@ -58,7 +58,7 @@ test(
           directory,
           binding: 'ASSETS',
           routerConfig: { has_user_worker: true },
-          run_worker_first: ['/api', '/api/*'],
+          run_worker_first: ['/api', '/api/*', '/calendar.ics'],
         },
         outboundService: async (request: RuntimeRequest) => {
           const url = new URL(request.url);
@@ -181,6 +181,52 @@ test(
       assert.deepEqual(state.papers[0].attendance, ['alex-id']);
       assert.deepEqual(state.papers[0].votes, []);
       assert.ok(!JSON.stringify(state).includes('private_key'));
+
+      const calendarUrl = 'https://reading.example/calendar.ics';
+      const readsBefore = google.reads;
+      const rejected = await mf.dispatchFetch(calendarUrl, { method: 'POST' });
+      assert.equal(rejected.status, 405);
+      assert.equal(rejected.headers.get('Allow'), 'GET, HEAD');
+      assert.equal(google.reads, readsBefore);
+      const rows = google.document.sheets[0].data![0].rowData!;
+      const timeColumn = rows[0].values!.findIndex(
+        (c) => c.effectiveValue?.stringValue === 'Time',
+      );
+      const locationColumn = rows[0].values!.findIndex(
+        (c) => c.effectiveValue?.stringValue === 'Location',
+      );
+      rows[1].values![10] = cell('2026-09-21');
+      rows[1].values![timeColumn] = cell('2:30 PM');
+      rows[1].values![locationColumn] = cell('Beyster 3725');
+      const calendar = await mf.dispatchFetch(calendarUrl);
+      assert.equal(calendar.status, 200, await calendar.clone().text());
+      assert.equal(
+        calendar.headers.get('Content-Type'),
+        'text/calendar; charset=utf-8',
+      );
+      assert.equal(calendar.headers.get('Cache-Control'), 'no-cache');
+      const ics = (await calendar.text()).replace(/\r\n /g, '');
+      assert.match(ics, /DTSTART:20260921T183000Z\r\nDTEND:20260921T193000Z/);
+      assert.match(ics, /LOCATION:Beyster 3725/);
+      assert.ok(ics.includes('https://umich.zoom.us/j/93467587435'));
+      assert.ok(ics.includes('https://reading.example/#next-session'));
+      assert.ok(!ics.includes('Concurrent paper')); // Still in the pool.
+      assert.ok(!ics.includes('alex-id'));
+      const head = await mf.dispatchFetch(calendarUrl, { method: 'HEAD' });
+      assert.equal(head.status, 200);
+      assert.equal(await head.text(), '');
+      rows[1].values![timeColumn] = cell('bad time');
+      const invalid = await mf.dispatchFetch(calendarUrl);
+      assert.equal(invalid.status, 409);
+      assert.match(await invalid.text(), /Time in row 2/);
+      assert.ok(
+        !invalid.headers.get('Content-Type')?.includes('text/calendar'),
+      );
+      rows[1].values![timeColumn] = cell('');
+      rows[1].values![10] = cell('');
+      const cleared = await mf.dispatchFetch(calendarUrl);
+      assert.equal(cleared.status, 200);
+      assert.ok(!(await cleared.text()).includes('BEGIN:VEVENT'));
     } finally {
       await mf.dispose();
       await rm(directory, { recursive: true, force: true });

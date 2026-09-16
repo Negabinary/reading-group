@@ -2,7 +2,7 @@
 
 Cloudflare Workers serves both the website and its same-origin /api endpoint. It calls the Google Sheets API directly using a service account. GitHub stores the source and deploys both parts together. Visitors do not authenticate with Google, and Apps Script is no longer in the request path.
 
-The existing **Papers** tab is used as-is. Keep its column order, member header notes, votes, attendance, and paper IDs. **Do not re-run setupMplse or replace the spreadsheet.**
+The existing **Papers** tab is preserved. Keep the first eleven columns (ID through Date), member header notes, votes, attendance, and paper IDs. On its first successful sheet request, the updated backend adds missing **Time** and **Location** columns at the right edge without moving existing cells. This also happens when testing the live backend locally against your real sheet. **Do not re-run setupMplse or replace the spreadsheet.**
 
 ## 1. Create the two free accounts/project connections
 
@@ -189,9 +189,33 @@ Public actions remain deliberately limited:
 
 There is no public action to delete rows, change discussion dates, change attendance, execute arbitrary Sheets requests, or run setup. Text writes use explicit string values, so a submitted title beginning with = is not a formula.
 
+Successful sheet requests also add the fixed Time and Location headers if missing. Organizers enter or change their values in Google Sheets. The separate `GET /calendar.ics` endpoint publishes scheduled sessions using the same sheet reader.
+
 Name-only identity is still a trust-based system: a visitor can choose somebody else's name. Public API responses include member names, papers, votes and attendance. Registration and suggestions remain open; same-origin JSON checks stop unrelated browser forms but do not authenticate users or stop a custom bot. Input size limits, duplicate validation, and platform quotas remain in place.
 
 The service-account credential itself is more powerful than the API: Editor sharing grants it editing access to the shared spreadsheet. Share only the intended sheet with that account. Organizers can revoke access by removing that sharing entry or disabling its key.
+
+## Calendar subscription
+
+The calendar ships with the website and Worker in the same deployment. No Google Calendar API, extra secret, login, or separate hosting is needed. Once this version is deployed, its subscription URL is:
+
+```text
+https://mplse-reading-group.negabinary.workers.dev/calendar.ics
+```
+
+1. Open the updated site once so its first sheet request adds the Time and Location columns. Existing member columns, IDs, votes and attendance stay in place.
+2. In Google Sheets, enter a Date and optional **Time** (`14:30` or `2:30 PM`) and **Location** (`Beyster 3725`, for example). You can move the entire Time/Location columns beside Date, keeping their headers and notes.
+3. Check **File → Settings → Time zone** in the spreadsheet. The calendar uses that time zone and handles daylight saving. Timed sessions last **60 minutes**; blank Time means an all-day event.
+4. Papers on the same date form one event. Enter that day's Time and Location on one paper row, or repeat matching values. Conflicting times or rooms produce an error so the feed does not publish a misleading schedule.
+5. On the website, click **Subscribe** beside Next session and copy the URL. On a computer, open Google Calendar and select **Other calendars → + → From URL**, paste the URL, and click **Add calendar**. See [Google's instructions](https://support.google.com/calendar/answer/37100?hl=en).
+
+The event description includes each paper's title, authors, link and notes, a link back to the website, the room/location, and **https://umich.zoom.us/j/93467587435**. With no room specified, Zoom is also the event's Location. The feed includes past and future scheduled dates and omits papers still in the pool. It publishes session details without member names, votes, or attendance lists.
+
+Google Calendar controls how often it refreshes subscribed calendars. Changes appear when it next fetches the feed. Subscribe using **From URL** rather than importing a downloaded `.ics` file if you want ongoing updates.
+
+To check locally, use `npm run preview` with your local credentials, then open `http://127.0.0.1:8787/calendar.ics`. Google Calendar needs the public HTTPS URL; it cannot fetch your laptop's localhost. HTTP GET and HEAD return `text/calendar`; invalid schedules and Google failures return a non-success status instead of a successful empty calendar. The feed runs through the same sheet coordinator and uses one Google read per request.
+
+Older backend versions interpret Time and Location as member columns. After these headers are added, keep a version that supports scheduling when rolling back; the retained Apps Script backend does not support this layout.
 
 ## Cost and reliability
 

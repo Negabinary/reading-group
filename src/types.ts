@@ -18,6 +18,8 @@ export interface Paper extends PaperInput {
   suggestedBy: string;
   addedAt: string;
   date: string;
+  time?: string;
+  location?: string;
   votes: string[];
   attendance: string[];
 }
@@ -27,6 +29,7 @@ export interface GroupState {
   papers: Paper[];
   sheetUrl: string;
   today: string;
+  timeZone?: string;
 }
 
 export interface RankedPaper extends Paper {
