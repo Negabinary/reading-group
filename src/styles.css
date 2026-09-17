@@ -1109,6 +1109,12 @@ a svg {
   background: #0b100ddb;
   backdrop-filter: blur(5px);
 }
+/* Firefox/Gecko, including Zen: avoid filtering over the animated 3D scene. */
+@supports (-moz-appearance: none) {
+  .modal::backdrop {
+    backdrop-filter: none;
+  }
+}
 .modal-heading {
   display: flex;
   gap: 20px;
