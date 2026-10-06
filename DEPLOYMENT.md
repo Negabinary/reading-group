@@ -229,6 +229,7 @@ Direct Sheets access removes the observed Apps Script ContentService redirect fa
 
 ## Troubleshooting and rollback
 
+- **“Send changes from the reading group website” / “Your browser could not verify this request”:** the API rejected the request's origin before looking up or creating a member. New members do not need approval or a Google login. Privacy settings can send `Origin: null` even for a same-origin POST; the updated Worker accepts this only with the browser's `Sec-Fetch-Site: same-origin` header and still requires JSON. Deploy the updated Worker, then reload the site. If the error persists, open the site's URL directly in a new browser tab and record the browser/version, page URL, and the failed `/api` request's `Origin` and `Sec-Fetch-Site` headers. Requests from other origins and unverified null origins remain rejected.
 - **Awaiting its Google Sheets connection:** set both Worker secrets and redeploy/re-run the GitHub workflow.
 - **Service account cannot access the sheet:** check the spreadsheet ID, Editor sharing to the exact service-account email, and Sheets API enablement.
 - **Authentication error:** check that the key belongs to that account and has not been deleted. Rotate it by generating a new key, rerunning setup:local/setup:github, and redeploying before deleting the old key.

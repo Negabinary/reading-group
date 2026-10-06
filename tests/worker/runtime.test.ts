@@ -113,6 +113,10 @@ test(
         },
         body: JSON.stringify({ action, args }),
       });
+    const privateBrowserHeaders = {
+      Origin: 'null',
+      'Sec-Fetch-Site': 'same-origin',
+    };
     try {
       const asset = await mf.dispatchFetch('https://reading.example/');
       assert.equal(asset.status, 200);
@@ -157,12 +161,30 @@ test(
         ).status,
         403,
       );
+      for (const headers of [
+        { Origin: 'null' },
+        { Origin: 'null', 'Sec-Fetch-Site': 'cross-site' },
+        { Origin: 'null', 'Sec-Fetch-Site': 'same-site' },
+        {
+          Origin: 'https://elsewhere.example',
+          'Sec-Fetch-Site': 'same-origin',
+        },
+      ]) {
+        assert.equal(
+          (await post('signIn', ['Bad origin'], headers)).status,
+          403,
+        );
+      }
       assert.equal((await post('setup', [])).status, 400);
       assert.equal(google.reads, 0);
 
       const joins = await Promise.all(
-        ['New one', 'New two', 'NEW ONE'].map(async (name) => {
-          const response = await post('signIn', [name]);
+        ['New one', 'New two', 'NEW ONE'].map(async (name, index) => {
+          const response = await post(
+            'signIn',
+            [name],
+            index === 0 ? privateBrowserHeaders : {},
+          );
           assert.equal(response.status, 200, await response.clone().text());
           return ((await response.json()) as any).data;
         }),
@@ -182,12 +204,12 @@ test(
         notes: '',
       };
       const suggestions = await Promise.all([
-        post('suggestPaper', [paper, 'alex-id']),
+        post('suggestPaper', [paper, 'alex-id'], privateBrowserHeaders),
         post('suggestPaper', [paper, 'sam-id']),
       ]);
       assert.deepEqual(suggestions.map((r) => r.status).sort(), [200, 409]);
       const votes = await Promise.all([
-        post('setVote', ['paper-1', 'alex-id', false]),
+        post('setVote', ['paper-1', 'alex-id', false], privateBrowserHeaders),
         post('setVote', ['paper-1', 'sam-id', false]),
       ]);
       assert.ok(votes.every((r) => r.status === 200));

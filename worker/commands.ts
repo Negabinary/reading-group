@@ -54,8 +54,19 @@ export async function parseCommand(request: Request): Promise<Command> {
   // Same-origin JSON prevents unrelated websites from submitting browser forms.
   // This is not authentication; registration is still intentionally name-only.
   const origin = request.headers.get('Origin');
-  if (origin && origin !== new URL(request.url).origin)
-    throw new ApiError('Send changes from the reading group website.', 403);
+  const fetchSite = request.headers.get('Sec-Fetch-Site');
+  // Privacy settings can hide Origin as "null" on a legitimate same-origin
+  // POST. Only the browser-controlled Fetch Metadata header can vouch for it;
+  // null origins from sandboxed or unrelated pages must remain blocked.
+  const privateSameOrigin = origin === 'null' && fetchSite === 'same-origin';
+  if (
+    (fetchSite && fetchSite !== 'same-origin') ||
+    (origin && origin !== new URL(request.url).origin && !privateSameOrigin)
+  )
+    throw new ApiError(
+      'Your browser could not verify this request. Open the reading group website directly in a new tab and try again.',
+      403,
+    );
   if (
     request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() !==
     'application/json'
